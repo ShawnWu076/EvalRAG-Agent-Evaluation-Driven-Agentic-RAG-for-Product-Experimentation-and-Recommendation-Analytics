@@ -13,6 +13,56 @@ EvalRAG Agent turns product experiment questions into structured, source-grounde
 - Evaluation harness for source hit rate, source match rate, concept coverage, decision accuracy, and MRR.
 - Agentic extension with SRM checks, metric lifts, significance approximations, and segment analysis over CSV data.
 
+## Why Evaluation-Driven RAG
+
+Naive RAG demos often work on cherry-picked questions but fail when retrieval returns irrelevant chunks, important source documents are missed, or the model generates unsupported answers. This project is built around a different question:
+
+```text
+Did the system calculate the facts correctly, retrieve the right rules, and make a reasonable recommendation based on those rules?
+```
+
+The goal is not only to produce a plausible answer. The goal is to make the RAG system inspectable, measurable, and improvable.
+
+EvalRAG evaluates three failure modes:
+
+1. **Retrieval failure**
+
+   Did the system retrieve the right playbook sections?
+
+   Example metrics:
+
+   - Hit@K
+   - Source match rate
+   - Mean reciprocal rank
+
+2. **Grounding / reasoning failure**
+
+   Did the answer use the retrieved rules, or did it invent unsupported claims?
+
+   Example checks:
+
+   - Concept coverage
+   - Faithfulness / groundedness
+   - Retrieved-source inspection
+
+3. **Decision failure**
+
+   Did the final recommendation match the experiment scenario?
+
+   Example decision labels:
+
+   - `launch`
+   - `investigate_further`
+   - `partial_rollout`
+   - `do_not_trust_result`
+   - `use_did_or_quasi_experiment`
+
+This turns the development loop from vibe-based prompting into:
+
+```text
+Build -> Log -> Evaluate -> Diagnose -> Optimize
+```
+
 ## Repository Layout
 
 ```text
