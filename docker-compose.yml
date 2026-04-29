@@ -1,0 +1,11 @@
+services:
+  evalrag-agent:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      EVALRAG_MODEL: local-rule-generator
+      EVALRAG_TOP_K: "5"
+    volumes:
+      - ./logs:/app/logs
+
