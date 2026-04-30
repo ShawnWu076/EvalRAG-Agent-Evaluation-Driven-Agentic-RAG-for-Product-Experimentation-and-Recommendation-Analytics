@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import re
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from app.chunking import build_chunks, load_chunks
 from app.concept_coverage import evaluate_concepts
+from app.concept_judge import judge_concepts
 from app.config import PLAYBOOK_DIR, settings
 from app.llm_generator import LLMGenerationConfig, LLMGenerationError, generate_llm_answer
 from app.policy_validator import validate_decision
@@ -112,6 +114,8 @@ def evaluate_trace(
     llm_decision: str | None = None,
     policy_decision: str | None = None,
     policy_validation: dict[str, Any] | None = None,
+    concept_judge: Callable[[str, list[str]], list[dict[str, Any]]] | None = None,
+    concept_coverage_target: float | None = None,
 ) -> dict[str, Any]:
     expected_sources = expected_sources or []
     expected_concepts = expected_concepts or []
@@ -121,7 +125,13 @@ def evaluate_trace(
     matched_sources = [source for source in expected_sources if source in source_set]
     missing_sources = [source for source in expected_sources if source not in source_set]
     unexpected_sources = [source for source in unique_retrieved_sources if source not in expected_source_set]
-    concept_result = evaluate_concepts(answer, expected_concepts)
+    concept_result = evaluate_concepts(
+        answer,
+        expected_concepts,
+        coverage_target=concept_coverage_target or settings.concept_coverage_failure_threshold,
+        llm_judge=concept_judge,
+        judge_min_confidence=settings.concept_judge_min_confidence,
+    )
     source_hit = bool(expected_source_set and matched_sources)
     source_match_rate = round(len(matched_sources) / len(expected_source_set), 4) if expected_source_set else None
     all_sources_found = len(matched_sources) == len(expected_source_set) if expected_source_set else None
@@ -148,10 +158,13 @@ def evaluate_trace(
         "missing_sources": missing_sources,
         "unexpected_sources": unexpected_sources,
         "concept_coverage": concept_result["concept_coverage"],
+        "deterministic_concept_coverage": concept_result["deterministic_concept_coverage"],
         "covered_concepts": concept_result["covered_concepts"],
         "missing_concepts": concept_result["missing_concepts"],
         "concept_matches": concept_result["concept_matches"],
         "concept_coverage_method": concept_result["concept_coverage_method"],
+        "concept_judge_used": concept_result["concept_judge_used"],
+        "concept_judge_error": concept_result["concept_judge_error"],
         "decision_correct": decision == expected_decision if expected_available else None,
         "llm_decision_correct": llm_decision == expected_decision if expected_available and llm_decision else None,
         "policy_decision_correct": policy_decision == expected_decision if expected_available and policy_decision else None,
@@ -182,6 +195,32 @@ def _fallback_llm_config() -> LLMGenerationConfig:
         timeout_seconds=settings.fallback_llm_timeout_seconds,
         token_parameter=settings.fallback_llm_token_parameter,
     )
+
+
+def _concept_judge_config() -> LLMGenerationConfig:
+    return LLMGenerationConfig(
+        base_url=settings.concept_judge_base_url,
+        model=settings.concept_judge_model,
+        api_key=settings.concept_judge_api_key,
+        temperature=settings.concept_judge_temperature,
+        max_tokens=settings.concept_judge_max_tokens,
+        timeout_seconds=settings.concept_judge_timeout_seconds,
+        token_parameter=settings.concept_judge_token_parameter,
+    )
+
+
+def _concept_judge_callback() -> Callable[[str, list[str]], list[dict[str, Any]]]:
+    config = _concept_judge_config()
+
+    def judge(answer: str, concepts: list[str]) -> list[dict[str, Any]]:
+        return judge_concepts(
+            answer,
+            concepts,
+            config,
+            min_confidence=settings.concept_judge_min_confidence,
+        )
+
+    return judge
 
 
 class EvalRAGPipeline:
@@ -223,6 +262,7 @@ class EvalRAGPipeline:
         expected_decision: str | None = None,
         tool_summary: dict[str, Any] | None = None,
         log: bool = True,
+        concept_judge_enabled: bool | None = None,
     ) -> dict[str, Any]:
         started = time.perf_counter()
         query_id = new_query_id()
@@ -269,7 +309,8 @@ class EvalRAGPipeline:
         policy_validation = validate_decision(question, llm_decision, tool_summary=tool_summary)
         final_decision = str(policy_validation.get("final_decision", llm_decision))
         answer = apply_policy_validation_to_answer(llm_answer, policy_validation)
-        latency = round(time.perf_counter() - started, 4)
+        judge_enabled = settings.concept_judge_enabled if concept_judge_enabled is None else concept_judge_enabled
+        concept_judge = _concept_judge_callback() if judge_enabled and expected_concepts else None
         retrieved_sources = [item["source"] for item in retrieved]
         evaluation = evaluate_trace(
             answer,
@@ -281,7 +322,10 @@ class EvalRAGPipeline:
             llm_decision=llm_decision,
             policy_decision=policy_validation.get("policy_decision"),
             policy_validation=policy_validation,
+            concept_judge=concept_judge,
+            concept_coverage_target=settings.concept_coverage_failure_threshold,
         )
+        latency = round(time.perf_counter() - started, 4)
         record = {
             "query_id": query_id,
             "timestamp": utc_timestamp(),
@@ -306,6 +350,8 @@ class EvalRAGPipeline:
             "latency_seconds": latency,
             "model": model_name,
             "generator_backend": generator_backend,
+            "concept_judge_enabled": bool(concept_judge),
+            "concept_judge_model": settings.concept_judge_model if concept_judge else None,
         }
         if policy_validation.get("policy_override"):
             record["llm_answer_before_policy"] = llm_answer
@@ -337,4 +383,6 @@ def record_to_public_response(record: dict[str, Any]) -> dict[str, Any]:
         "model": record["model"],
         "generator_backend": record.get("generator_backend", "openai_compatible"),
         "generator_error": record.get("generator_error"),
+        "concept_judge_enabled": record.get("concept_judge_enabled", False),
+        "concept_judge_model": record.get("concept_judge_model"),
     }

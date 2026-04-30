@@ -118,6 +118,12 @@ Run retrieval-only eval when you do not want to spend LLM tokens:
 python scripts/run_eval.py --retrieval-only
 ```
 
+Run strict concept judging only for unresolved concept gaps:
+
+```bash
+python scripts/run_eval.py --concept-judge --limit 5 --save-records logs/openai_eval_judge_sample5.json
+```
+
 ## Metrics Added
 
 `run_eval.py` now reports:
@@ -130,6 +136,9 @@ python scripts/run_eval.py --retrieval-only
 - `policy_correction_rate`: how often policy fixed an incorrect LLM decision
 - `policy_regression_rate`: how often policy changed a correct LLM decision into an incorrect final decision
 - `concept_failure_threshold`: concept coverage threshold below which a record is surfaced in failures; currently `0.8`
+- `concept_judge_enabled`: whether strict LLM judging was enabled for this eval run
+- `deterministic_concept_coverage`: concept coverage before any LLM judge fallback
+- `concept_judge_used`: per-record flag showing whether the judge actually ran
 
 The saved failure records also include `failure_hypothesis`, with rough categories such as:
 

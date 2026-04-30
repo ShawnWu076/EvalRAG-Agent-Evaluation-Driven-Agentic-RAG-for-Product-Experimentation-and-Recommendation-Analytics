@@ -31,6 +31,10 @@ def _default_fallback_llm_api_key() -> str:
     return os.getenv("EVALRAG_FALLBACK_LLM_API_KEY") or "ollama"
 
 
+def _default_concept_judge_api_key() -> str:
+    return os.getenv("EVALRAG_CONCEPT_JUDGE_API_KEY") or _default_llm_api_key()
+
+
 @dataclass(frozen=True)
 class Settings:
     """Runtime settings with environment-variable overrides."""
@@ -60,6 +64,16 @@ class Settings:
     chunk_semantic_offline: bool = _env_bool("EVALRAG_CHUNK_SEMANTIC_OFFLINE", True)
     chunk_semantic_min_size: int = int(os.getenv("EVALRAG_CHUNK_SEMANTIC_MIN_SIZE", "160"))
     hybrid_alpha: float = float(os.getenv("EVALRAG_HYBRID_ALPHA", "0.35"))
+    concept_coverage_failure_threshold: float = float(os.getenv("EVALRAG_CONCEPT_FAILURE_THRESHOLD", "0.8"))
+    concept_judge_enabled: bool = _env_bool("EVALRAG_CONCEPT_JUDGE_ENABLED", False)
+    concept_judge_base_url: str = os.getenv("EVALRAG_CONCEPT_JUDGE_BASE_URL", os.getenv("EVALRAG_LLM_BASE_URL", "https://api.openai.com/v1"))
+    concept_judge_model: str = os.getenv("EVALRAG_CONCEPT_JUDGE_MODEL", os.getenv("EVALRAG_LLM_MODEL", "gpt-5.4-mini"))
+    concept_judge_api_key: str = _default_concept_judge_api_key()
+    concept_judge_temperature: float = float(os.getenv("EVALRAG_CONCEPT_JUDGE_TEMPERATURE", "0"))
+    concept_judge_max_tokens: int = int(os.getenv("EVALRAG_CONCEPT_JUDGE_MAX_TOKENS", "700"))
+    concept_judge_token_parameter: str = os.getenv("EVALRAG_CONCEPT_JUDGE_TOKEN_PARAMETER", os.getenv("EVALRAG_LLM_TOKEN_PARAMETER", "max_completion_tokens"))
+    concept_judge_timeout_seconds: float = float(os.getenv("EVALRAG_CONCEPT_JUDGE_TIMEOUT_SECONDS", "90"))
+    concept_judge_min_confidence: float = float(os.getenv("EVALRAG_CONCEPT_JUDGE_MIN_CONFIDENCE", "0.8"))
     log_path: Path = Path(os.getenv("EVALRAG_LOG_PATH", DEFAULT_LOG_PATH))
     index_path: Path = Path(os.getenv("EVALRAG_INDEX_PATH", DEFAULT_INDEX_PATH))
 

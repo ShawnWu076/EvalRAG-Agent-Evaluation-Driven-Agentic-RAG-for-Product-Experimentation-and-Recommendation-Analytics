@@ -72,6 +72,18 @@ EVALRAG_LLM_TOKEN_PARAMETER=max_completion_tokens \
 python scripts/run_eval.py --save-records logs/openai_eval_full.json
 ```
 
+Optional strict concept judging adds extra LLM calls only for unresolved concept gaps:
+
+```bash
+EVALRAG_GENERATOR=openai_compatible \
+EVALRAG_LLM_BASE_URL=https://api.openai.com/v1 \
+EVALRAG_LLM_MODEL=gpt-5.4-mini \
+EVALRAG_LLM_TOKEN_PARAMETER=max_completion_tokens \
+python scripts/run_eval.py --concept-judge --limit 5 --save-records logs/openai_eval_judge_sample5.json
+```
+
+You can use a separate judge model with `EVALRAG_CONCEPT_JUDGE_MODEL`; otherwise it uses the main LLM model.
+
 ## Notes
 
 - The project currently uses Chat Completions for compatibility with local model servers.

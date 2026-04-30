@@ -1,8 +1,9 @@
-"""Deterministic concept coverage evaluation."""
+"""Concept coverage evaluation with deterministic matching and optional strict judge."""
 
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from difflib import SequenceMatcher
 from typing import Any
 
@@ -63,6 +64,7 @@ SPECIAL_STEMS = {
     "rollout": "rollout",
     "roll": "rollout",
 }
+ConceptJudge = Callable[[str, list[str]], list[dict[str, Any]]]
 
 
 def normalize_text(text: str) -> str:
@@ -98,24 +100,59 @@ def _window_similarity(concept: str, answer: str) -> float:
     return best
 
 
+def _coverage(covered: list[str], expected_concepts: list[str]) -> float | None:
+    return round(len(covered) / len(expected_concepts), 4) if expected_concepts else None
+
+
+def _apply_judge_results(
+    matches: list[dict[str, Any]],
+    judge_results: list[dict[str, Any]],
+    judge_min_confidence: float,
+) -> None:
+    by_concept = {normalize_text(str(item.get("concept", ""))): item for item in judge_results}
+    for match in matches:
+        if match["covered"]:
+            continue
+        judged = by_concept.get(normalize_text(str(match["concept"])))
+        if not judged:
+            continue
+        try:
+            confidence = float(judged.get("confidence", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            confidence = 0.0
+        raw_covered = bool(judged.get("covered", False))
+        judge_covered = raw_covered and confidence >= judge_min_confidence
+        match["judge_covered"] = judge_covered
+        match["judge_raw_covered"] = raw_covered
+        match["judge_confidence"] = round(max(0.0, min(1.0, confidence)), 4)
+        match["judge_rationale"] = str(judged.get("rationale", ""))[:240]
+        if judge_covered:
+            match["covered"] = True
+            match["method"] = "strict_llm_judge"
+            match["score"] = round(confidence, 4)
+
+
 def evaluate_concepts(
     answer: str,
     expected_concepts: list[str],
     semantic_threshold: float = 0.8,
     fuzzy_threshold: float = 0.88,
+    coverage_target: float = 0.8,
+    llm_judge: ConceptJudge | None = None,
+    judge_min_confidence: float = 0.8,
 ) -> dict[str, Any]:
-    """Evaluate expected concept coverage with exact and deterministic semantic matching.
+    """Evaluate concept coverage.
 
-    This intentionally avoids LLM-as-judge. It first checks exact normalized phrase
-    matches, then checks stemmed content-token coverage, then a conservative fuzzy
-    phrase-window score. The output is inspectable and repeatable.
+    The first pass is deterministic and cheap: exact normalized phrases, stemmed
+    content-token overlap, and conservative fuzzy phrase windows. If that score
+    is below coverage_target, an optional strict LLM judge can review only the
+    still-missing concepts. The judge is intentionally a final check, not the
+    default source of truth for every concept.
     """
 
     answer_norm = normalize_text(answer)
     answer_token_set = set(concept_tokens(answer))
     matches: list[dict[str, Any]] = []
-    covered: list[str] = []
-    missing: list[str] = []
 
     for concept in expected_concepts:
         concept_norm = normalize_text(concept)
@@ -138,11 +175,6 @@ def evaluate_concepts(
             covered_flag = True
             method = "fuzzy_phrase_window"
 
-        if covered_flag:
-            covered.append(concept)
-        else:
-            missing.append(concept)
-
         matches.append(
             {
                 "concept": concept,
@@ -153,11 +185,39 @@ def evaluate_concepts(
             }
         )
 
-    coverage = round(len(covered) / len(expected_concepts), 4) if expected_concepts else None
+    deterministic_covered = [str(match["concept"]) for match in matches if match["covered"]]
+    deterministic_coverage = _coverage(deterministic_covered, expected_concepts)
+    judge_used = False
+    judge_error = None
+
+    if (
+        llm_judge
+        and expected_concepts
+        and deterministic_coverage is not None
+        and deterministic_coverage < coverage_target
+    ):
+        missing_for_judge = [str(match["concept"]) for match in matches if not match["covered"]]
+        if missing_for_judge:
+            judge_used = True
+            try:
+                judge_results = llm_judge(answer, missing_for_judge)
+                _apply_judge_results(matches, judge_results, judge_min_confidence)
+            except Exception as exc:  # pragma: no cover - defensive eval telemetry
+                judge_error = str(exc)
+
+    covered = [str(match["concept"]) for match in matches if match["covered"]]
+    missing = [str(match["concept"]) for match in matches if not match["covered"]]
+    coverage = _coverage(covered, expected_concepts)
+    method = "exact_or_deterministic_semantic"
+    if judge_used:
+        method = "exact_or_deterministic_semantic_then_strict_llm_judge"
     return {
         "concept_coverage": coverage,
+        "deterministic_concept_coverage": deterministic_coverage,
         "covered_concepts": covered,
         "missing_concepts": missing,
         "concept_matches": matches,
-        "concept_coverage_method": "exact_or_deterministic_semantic",
+        "concept_coverage_method": method,
+        "concept_judge_used": judge_used,
+        "concept_judge_error": judge_error,
     }

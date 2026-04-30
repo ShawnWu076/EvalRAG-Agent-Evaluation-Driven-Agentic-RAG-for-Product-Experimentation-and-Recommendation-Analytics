@@ -15,9 +15,9 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-CONCEPT_FAILURE_THRESHOLD = 0.8
-
 from app.config import settings  # noqa: E402
+
+CONCEPT_FAILURE_THRESHOLD = settings.concept_coverage_failure_threshold
 from app.rag_pipeline import EvalRAGPipeline, evaluate_trace  # noqa: E402
 
 
@@ -122,6 +122,7 @@ def run_eval(
     limit: int | None = None,
     save_records: Path | None = None,
     generation_enabled: bool = True,
+    concept_judge_enabled: bool | None = None,
 ) -> dict[str, Any]:
     questions = load_jsonl(path)
     if limit is not None:
@@ -136,6 +137,7 @@ def run_eval(
                 expected_concepts=item.get("expected_concepts", []),
                 expected_decision=item.get("expected_decision"),
                 log=write_logs,
+                concept_judge_enabled=concept_judge_enabled,
             )
             record["eval_id"] = item["id"]
         else:
@@ -191,6 +193,9 @@ def run_eval(
             "matched_sources": record["evaluation"]["matched_sources"],
             "missing_sources": record["evaluation"]["missing_sources"],
             "concept_coverage": record["evaluation"].get("concept_coverage"),
+            "deterministic_concept_coverage": record["evaluation"].get("deterministic_concept_coverage"),
+            "concept_judge_used": record["evaluation"].get("concept_judge_used"),
+            "concept_judge_error": record["evaluation"].get("concept_judge_error"),
             "missing_concepts": record["evaluation"].get("missing_concepts", []),
             "concept_matches": record["evaluation"].get("concept_matches", []),
             "top_sources": [chunk["source"] for chunk in record["retrieved_chunks"][:3]],
@@ -216,6 +221,7 @@ def run_eval(
         "top_k": top_k,
         "alpha": alpha,
         "generation_enabled": generation_enabled,
+        "concept_judge_enabled": bool(concept_judge_enabled if concept_judge_enabled is not None else settings.concept_judge_enabled) if generation_enabled else False,
         "concept_failure_threshold": CONCEPT_FAILURE_THRESHOLD,
         "metrics": {
             "source_hit_at_k": _mean(source_hit),
@@ -253,6 +259,20 @@ def main() -> None:
     parser.add_argument("--limit", type=int, default=None, help="Evaluate only the first N questions.")
     parser.add_argument("--save-records", type=Path, default=None, help="Write per-question eval records to a JSON file.")
     parser.add_argument("--retrieval-only", action="store_true", help="Evaluate retrieval metrics without calling an LLM.")
+    judge_group = parser.add_mutually_exclusive_group()
+    judge_group.add_argument(
+        "--concept-judge",
+        dest="concept_judge_enabled",
+        action="store_true",
+        default=settings.concept_judge_enabled,
+        help="Use a strict LLM judge for missing concepts when deterministic coverage is below the failure threshold.",
+    )
+    judge_group.add_argument(
+        "--no-concept-judge",
+        dest="concept_judge_enabled",
+        action="store_false",
+        help="Disable strict LLM concept judging even if EVALRAG_CONCEPT_JUDGE_ENABLED=true.",
+    )
     args = parser.parse_args()
 
     result = run_eval(
@@ -263,6 +283,7 @@ def main() -> None:
         limit=args.limit,
         save_records=args.save_records,
         generation_enabled=not args.retrieval_only,
+        concept_judge_enabled=args.concept_judge_enabled,
     )
     print(json.dumps(result, indent=2))
 

@@ -29,6 +29,8 @@ class AskResponse(BaseModel):
     model: str
     generator_backend: str = "openai_compatible"
     generator_error: str | None = None
+    concept_judge_enabled: bool = False
+    concept_judge_model: str | None = None
 
 
 class AnalyzeResponse(AskResponse):

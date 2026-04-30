@@ -231,6 +231,12 @@ Run retrieval-only evaluation without calling an LLM:
 python scripts/run_eval.py --retrieval-only
 ```
 
+Run stricter concept coverage with an LLM judge fallback. The judge is only called for still-missing concepts when deterministic coverage is below the failure threshold:
+
+```bash
+python scripts/run_eval.py --concept-judge --limit 5 --save-records logs/openai_eval_judge_sample5.json
+```
+
 Compare retrieval settings without LLM cost:
 
 ```bash
@@ -248,7 +254,8 @@ Current retrieval metrics include:
 
 Answer metrics include:
 
-- `concept_coverage`: deterministic exact-or-semantic token coverage of expected concepts
+- `concept_coverage`: deterministic exact/semantic coverage, optionally upgraded by strict LLM judging for missing concepts
+- `deterministic_concept_coverage`: score before any LLM judge fallback
 - `llm_decision_accuracy`
 - `policy_decision_accuracy_when_triggered`
 - `final_decision_accuracy`
@@ -281,7 +288,7 @@ Optional section when a hard policy confirms or overrides the LLM proposal.
 ## Current Limitations
 
 - The playbook is still being expanded and refined.
-- Concept coverage now uses deterministic exact, stemmed token-overlap, and fuzzy phrase-window matching; it is more forgiving than exact strings but still not a full LLM judge.
+- Concept coverage uses deterministic exact, stemmed token-overlap, and fuzzy phrase-window matching by default; optional `--concept-judge` adds a strict LLM judge only for unresolved gaps.
 - The policy validator is conservative and deterministic; it now records structured policy IDs, priorities, and blocking/supportive findings, but future work should externalize these rules into a configurable policy layer.
 - The statistical tools are lightweight approximations intended for synthetic demo data, not production experimentation infrastructure.
 - Retrieval uses a dependency-light hashed-vector method, not a production embedding database or reranker.
@@ -293,7 +300,7 @@ Optional section when a hard policy confirms or overrides the LLM proposal.
 3. Run retrieval-only eval to diagnose source coverage before spending LLM tokens.
 4. Run LLM eval and inspect saved records for decision and grounding failures.
 5. Expand targeted eval cases for each policy validator rule and inspect `policy_correction_rate` / `policy_regression_rate`.
-6. Add stronger faithfulness evaluation, such as LLM-as-judge or a Ragas/DeepEval-style groundedness check.
+6. Add stronger faithfulness evaluation beyond concept coverage, such as groundedness judging against retrieved chunks or a Ragas/DeepEval-style rubric.
 
 ## Project Identity
 

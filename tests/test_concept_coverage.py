@@ -25,6 +25,68 @@ class ConceptCoverageTests(unittest.TestCase):
         self.assertEqual(result["concept_coverage"], 0.0)
         self.assertEqual(result["missing_concepts"], ["sample ratio mismatch"])
 
+    def test_strict_judge_runs_only_when_deterministic_coverage_is_low(self) -> None:
+        calls: list[list[str]] = []
+
+        def fake_judge(answer: str, concepts: list[str]) -> list[dict[str, object]]:
+            calls.append(concepts)
+            return [
+                {
+                    "concept": "segment analysis",
+                    "covered": True,
+                    "confidence": 0.91,
+                    "rationale": "Answer says to inspect user cohorts.",
+                }
+            ]
+
+        result = evaluate_concepts(
+            "Inspect user cohorts before rollout.",
+            ["segment analysis"],
+            llm_judge=fake_judge,
+        )
+
+        self.assertEqual(calls, [["segment analysis"]])
+        self.assertEqual(result["concept_coverage"], 1.0)
+        self.assertEqual(result["deterministic_concept_coverage"], 0.0)
+        self.assertTrue(result["concept_judge_used"])
+        self.assertEqual(result["concept_matches"][0]["method"], "strict_llm_judge")
+
+    def test_strict_judge_does_not_run_when_deterministic_coverage_passes(self) -> None:
+        calls: list[list[str]] = []
+
+        def fake_judge(answer: str, concepts: list[str]) -> list[dict[str, object]]:
+            calls.append(concepts)
+            return []
+
+        result = evaluate_concepts(
+            "Run segment analysis before launch.",
+            ["segment analysis"],
+            llm_judge=fake_judge,
+        )
+
+        self.assertEqual(calls, [])
+        self.assertFalse(result["concept_judge_used"])
+
+    def test_low_confidence_judge_approval_does_not_count(self) -> None:
+        def fake_judge(answer: str, concepts: list[str]) -> list[dict[str, object]]:
+            return [
+                {
+                    "concept": "sample ratio mismatch",
+                    "covered": True,
+                    "confidence": 0.6,
+                    "rationale": "Only loosely related.",
+                }
+            ]
+
+        result = evaluate_concepts(
+            "The result needs more caution.",
+            ["sample ratio mismatch"],
+            llm_judge=fake_judge,
+        )
+
+        self.assertEqual(result["concept_coverage"], 0.0)
+        self.assertEqual(result["missing_concepts"], ["sample ratio mismatch"])
+
 
 if __name__ == "__main__":
     unittest.main()
