@@ -85,6 +85,8 @@ scripts/
   generate_synthetic_data.py
 logs/
   rag_logs.jsonl             created at runtime
+docs/
+  LOCAL_LLM.md               Ollama / LM Studio setup
 tests/
 ```
 
@@ -94,7 +96,7 @@ The core build/eval/stat scripts are dependency-light and run with the Python st
 
 ```bash
 python3 scripts/build_index.py
-python3 scripts/query.py "Revenue increased but 7-day retention dropped. Should we launch?"
+python3 scripts/query.py "Revenue increased but 7-day retention dropped. Should we launch?" --show-metadata
 python3 scripts/analyze_csv.py data/synthetic/guardrail_failure.csv --show-tools
 python3 scripts/run_eval.py
 python3 scripts/compare_retrievers.py
@@ -119,6 +121,20 @@ curl -X POST http://127.0.0.1:8000/ask \
   -H "Content-Type: application/json" \
   -d '{"question":"Revenue increased but 7-day retention dropped. Should we launch?"}'
 ```
+
+## Optional Local LLM Generation
+
+By default, EvalRAG uses a deterministic `rule` generator so the project can run without an LLM server. You can switch generation to a local OpenAI-compatible endpoint such as Ollama or LM Studio:
+
+```bash
+EVALRAG_GENERATOR=local_llm \
+EVALRAG_LLM_BASE_URL=http://localhost:11434/v1 \
+EVALRAG_LLM_MODEL=qwen3:14b \
+EVALRAG_LLM_API_KEY=ollama \
+python3 scripts/query.py "Revenue increased but 7-day retention dropped. Should we launch?" --show-metadata
+```
+
+For LM Studio, use `http://localhost:1234/v1` and the model id shown in the LM Studio Developer tab. See `docs/LOCAL_LLM.md` for details.
 
 ## Example V1 Question
 
