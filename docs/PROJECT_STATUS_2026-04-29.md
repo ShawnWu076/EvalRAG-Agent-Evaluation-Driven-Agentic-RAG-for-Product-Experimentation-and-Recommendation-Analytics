@@ -197,9 +197,9 @@ curl -X POST http://127.0.0.1:8000/analyze \
 
 ## What Still Needs Improvement
 
-1. Add a real LLM generation path:
-   - Historical note: the initial prototype used a deterministic memo fallback; the current pipeline uses an OpenAI-compatible LLM with local Qwen fallback.
-   - Next, add an optional OpenAI-powered generator using retrieved chunks and tool outputs.
+1. Harden the LLM decision path:
+   - Current pipeline uses an OpenAI-compatible LLM for memo generation and decision labels.
+   - Next, add a policy validator for hard constraints such as SRM failures, assignment bugs, non-random rollouts, and critical guardrail regressions.
 
 2. Add real embeddings and a vector database:
    - The current retriever uses dependency-light hashed vectors.
