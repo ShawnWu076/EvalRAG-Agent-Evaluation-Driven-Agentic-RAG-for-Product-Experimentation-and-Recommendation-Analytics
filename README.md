@@ -48,6 +48,7 @@ This is still a prototype, not a production launch-decision system. The goal is 
 - RAG over a product experimentation playbook instead of a generic PDF chatbot.
 - Hybrid retrieval using BM25 plus hashed-vector scoring.
 - LLM-generated launch memos with explicit, parseable decision labels.
+- Hybrid decision tracing with `llm_decision`, `policy_decision`, and `final_decision`.
 - Hosted OpenAI-compatible generation by default, with local Ollama `qwen3:8b` fallback.
 - Telemetry for query, retrieved chunks, scores, latency, answer, model, and backend.
 - Evaluation harness for retrieval quality, concept coverage, decision accuracy, and latency.
@@ -69,13 +70,19 @@ Statistical tools, when CSV is provided
 OpenAI-compatible LLM generator
         |
         v
-Structured launch memo + parseable decision label
+LLM memo + llm_decision
+        |
+        v
+Policy validator
+        |
+        v
+Final launch memo + final_decision
         |
         v
 Telemetry log + evaluation metrics
 ```
 
-The LLM is responsible for synthesizing the answer and choosing one decision label from the allowed decision set. The code then parses that label and evaluates it against the scenario dataset.
+The LLM is responsible for synthesizing the answer and choosing one decision label from the allowed decision set. The code then parses that label, validates it against hard product-experiment policies, and evaluates both the LLM proposal and final decision against the scenario dataset.
 
 Allowed decision labels:
 
@@ -91,7 +98,8 @@ Allowed decision labels:
 ```text
 app/
   main.py                    FastAPI app
-  rag_pipeline.py            RAG orchestration, LLM generation, telemetry, eval helpers
+  rag_pipeline.py            RAG orchestration, LLM generation, policy validation, eval helpers
+  policy_validator.py        Hard-constraint policy checks for hybrid decisions
   llm_generator.py           OpenAI-compatible chat-completions client and prompt builder
   retrieval.py               BM25 + hashed-vector hybrid retriever
   chunking.py                Markdown playbook chunking and index persistence
@@ -113,6 +121,7 @@ scripts/
 docs/
   HOSTED_OPENAI_API.md       Hosted OpenAI setup
   LOCAL_LLM.md               Ollama / LM Studio setup
+  DECISION_EVALUATION.md     LLM/policy/final decision tracing
 logs/                        Runtime logs and saved eval records, ignored by git
 tests/                       Unit tests
 ```
@@ -188,7 +197,7 @@ model: qwen3:8b
 generator_error: <primary hosted model error>
 ```
 
-See `docs/HOSTED_OPENAI_API.md` and `docs/LOCAL_LLM.md` for more details.
+See `docs/HOSTED_OPENAI_API.md`, `docs/LOCAL_LLM.md`, and `docs/DECISION_EVALUATION.md` for more details.
 
 ## Evaluation
 
@@ -240,7 +249,11 @@ Current retrieval metrics include:
 Answer metrics include:
 
 - `concept_coverage`
-- `decision_accuracy`
+- `llm_decision_accuracy`
+- `policy_decision_accuracy_when_triggered`
+- `final_decision_accuracy`
+- `policy_correction_rate`
+- `policy_regression_rate`
 - `avg_latency_seconds`
 
 ## Example Output Shape
@@ -259,6 +272,9 @@ Answer metrics include:
 
 ## Risks / Caveats
 
+## Policy Validation
+Optional section when a hard policy confirms or overrides the LLM proposal.
+
 ## Retrieved Sources
 ```
 
@@ -266,7 +282,7 @@ Answer metrics include:
 
 - The playbook is still being expanded and refined.
 - Concept coverage currently uses simple text matching, so semantically correct paraphrases may be undercounted.
-- The LLM now chooses the decision label, but there is not yet a separate policy validator that can override unsafe launch recommendations.
+- The policy validator is conservative and deterministic; future work should move hard constraints into a more structured policy layer.
 - The statistical tools are lightweight approximations intended for synthetic demo data, not production experimentation infrastructure.
 - Retrieval uses a dependency-light hashed-vector method, not a production embedding database or reranker.
 
@@ -276,7 +292,7 @@ Answer metrics include:
 2. Rebuild the index after playbook edits with `python scripts/build_index.py`.
 3. Run retrieval-only eval to diagnose source coverage before spending LLM tokens.
 4. Run LLM eval and inspect saved records for decision and grounding failures.
-5. Add a policy validator for hard constraints such as SRM failure, assignment bugs, critical guardrail regressions, and non-random rollouts.
+5. Expand targeted eval cases for each policy validator rule and inspect `policy_correction_rate` / `policy_regression_rate`.
 6. Add stronger faithfulness evaluation, such as LLM-as-judge or a Ragas/DeepEval-style groundedness check.
 
 ## Project Identity

@@ -1,4 +1,4 @@
-"""RAG orchestration, LLM generation, telemetry, and lightweight evaluation."""
+"""RAG orchestration, LLM generation, policy validation, telemetry, and evaluation."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from typing import Any
 from app.chunking import build_chunks, load_chunks
 from app.config import PLAYBOOK_DIR, settings
 from app.llm_generator import LLMGenerationConfig, LLMGenerationError, generate_llm_answer
+from app.policy_validator import validate_decision
 from app.retrieval import (
     SimpleHybridRetriever,
     results_to_dicts,
@@ -49,6 +50,57 @@ def extract_decision(answer: str) -> str:
     return UNKNOWN_DECISION
 
 
+def _replace_decision_section(answer: str, final_decision: str) -> str:
+    pattern = r"(##\s*Decision Recommendation\s*\n)(.*?)(?=\n##\s+|\Z)"
+    replacement = rf"\1`{final_decision}`\n"
+    updated, count = re.subn(pattern, replacement, answer, count=1, flags=re.IGNORECASE | re.DOTALL)
+    if count:
+        return updated
+    return answer.rstrip() + f"\n\n## Decision Recommendation\n`{final_decision}`\n"
+
+
+def _policy_validation_markdown(policy_validation: dict[str, Any]) -> str:
+    findings = policy_validation.get("policy_findings", [])
+    if not findings:
+        return ""
+    llm_decision = policy_validation.get("llm_decision")
+    final_decision = policy_validation.get("final_decision")
+    action = policy_validation.get("policy_action")
+    if action == "override":
+        lead = f"Policy validation changed the LLM proposal from `{llm_decision}` to `{final_decision}`."
+    else:
+        lead = f"Policy validation confirmed the LLM decision `{final_decision}`."
+    lines = ["## Policy Validation", lead, "", "Triggered policies:"]
+    for finding in findings[:4]:
+        lines.append(
+            f"- `{finding['policy_id']}` -> `{finding['recommended_decision']}`: {finding['reason']}"
+        )
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def apply_policy_validation_to_answer(answer: str, policy_validation: dict[str, Any]) -> str:
+    """Align visible memo text with the final policy-validated decision."""
+
+    if not policy_validation.get("policy_triggered"):
+        return answer
+    final_decision = str(policy_validation.get("final_decision", UNKNOWN_DECISION))
+    updated = _replace_decision_section(answer, final_decision)
+    section = _policy_validation_markdown(policy_validation)
+    if not section:
+        return updated
+    if "## Policy Validation" in updated:
+        return updated
+    if re.search(r"\n##\s*Retrieved Sources", updated, flags=re.IGNORECASE):
+        return re.sub(
+            r"\n##\s*Retrieved Sources",
+            "\n\n" + section + "\n## Retrieved Sources",
+            updated,
+            count=1,
+            flags=re.IGNORECASE,
+        )
+    return updated.rstrip() + "\n\n" + section
+
+
 def evaluate_trace(
     answer: str,
     retrieved_sources: list[str],
@@ -56,6 +108,9 @@ def evaluate_trace(
     expected_sources: list[str] | None = None,
     expected_concepts: list[str] | None = None,
     expected_decision: str | None = None,
+    llm_decision: str | None = None,
+    policy_decision: str | None = None,
+    policy_validation: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     expected_sources = expected_sources or []
     expected_concepts = expected_concepts or []
@@ -84,6 +139,9 @@ def evaluate_trace(
         if unique_retrieved_sources and expected_source_set
         else None
     )
+    expected_available = bool(expected_decision)
+    has_policy_validation = policy_validation is not None
+    policy_validation = policy_validation or {}
     return {
         "source_hit": source_hit,
         "source_match_rate": source_match_rate,
@@ -95,7 +153,11 @@ def evaluate_trace(
         "unexpected_sources": unexpected_sources,
         "concept_coverage": round(len(covered_concepts) / len(expected_concepts), 4) if expected_concepts else None,
         "covered_concepts": covered_concepts,
-        "decision_correct": decision == expected_decision if expected_decision else None,
+        "decision_correct": decision == expected_decision if expected_available else None,
+        "llm_decision_correct": llm_decision == expected_decision if expected_available and llm_decision else None,
+        "policy_decision_correct": policy_decision == expected_decision if expected_available and policy_decision else None,
+        "policy_triggered": bool(policy_validation.get("policy_triggered")) if has_policy_validation else None,
+        "policy_override": bool(policy_validation.get("policy_override")) if has_policy_validation else None,
     }
 
 
@@ -177,7 +239,7 @@ class EvalRAGPipeline:
         generator_error = None
         fallback_error = None
         try:
-            answer = generate_llm_answer(
+            llm_answer = generate_llm_answer(
                 question,
                 retrieved,
                 _primary_llm_config(),
@@ -189,7 +251,7 @@ class EvalRAGPipeline:
                 raise
             generator_error = str(exc)
             try:
-                answer = generate_llm_answer(
+                llm_answer = generate_llm_answer(
                     question,
                     retrieved,
                     _fallback_llm_config(),
@@ -204,16 +266,22 @@ class EvalRAGPipeline:
                     f"Primary LLM failed: {generator_error}; fallback local LLM failed: {fallback_error}"
                 ) from fallback_exc
 
-        decision = extract_decision(answer)
+        llm_decision = extract_decision(llm_answer)
+        policy_validation = validate_decision(question, llm_decision, tool_summary=tool_summary)
+        final_decision = str(policy_validation.get("final_decision", llm_decision))
+        answer = apply_policy_validation_to_answer(llm_answer, policy_validation)
         latency = round(time.perf_counter() - started, 4)
         retrieved_sources = [item["source"] for item in retrieved]
         evaluation = evaluate_trace(
             answer,
             retrieved_sources,
-            decision,
+            final_decision,
             expected_sources=expected_sources,
             expected_concepts=expected_concepts,
             expected_decision=expected_decision,
+            llm_decision=llm_decision,
+            policy_decision=policy_validation.get("policy_decision"),
+            policy_validation=policy_validation,
         )
         record = {
             "query_id": query_id,
@@ -227,7 +295,11 @@ class EvalRAGPipeline:
                 for item in retrieved
             ],
             "answer": answer,
-            "decision": decision,
+            "llm_decision": llm_decision,
+            "policy_decision": policy_validation.get("policy_decision"),
+            "final_decision": final_decision,
+            "decision": final_decision,
+            "policy_validation": policy_validation,
             "expected_sources": expected_sources or [],
             "expected_concepts": expected_concepts or [],
             "expected_decision": expected_decision,
@@ -236,11 +308,13 @@ class EvalRAGPipeline:
             "model": model_name,
             "generator_backend": generator_backend,
         }
+        if policy_validation.get("policy_override"):
+            record["llm_answer_before_policy"] = llm_answer
         if generator_error:
             record["generator_error"] = generator_error
         if fallback_error:
             record["fallback_error"] = fallback_error
-        if decision == UNKNOWN_DECISION:
+        if llm_decision == UNKNOWN_DECISION:
             record["decision_parse_error"] = "LLM answer did not contain one allowed decision label."
         if tool_summary:
             record["tool_summary"] = tool_summary
@@ -254,6 +328,10 @@ def record_to_public_response(record: dict[str, Any]) -> dict[str, Any]:
         "query_id": record["query_id"],
         "answer": record["answer"],
         "decision": record["decision"],
+        "llm_decision": record.get("llm_decision"),
+        "policy_decision": record.get("policy_decision"),
+        "final_decision": record.get("final_decision", record["decision"]),
+        "policy_validation": record.get("policy_validation", {}),
         "retrieved_chunks": record["retrieved_chunks"],
         "evaluation": record["evaluation"],
         "latency_seconds": record["latency_seconds"],
