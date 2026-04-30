@@ -22,6 +22,7 @@ class LLMGenerationConfig:
     temperature: float
     max_tokens: int
     timeout_seconds: float
+    token_parameter: str = "max_tokens"
 
 
 def strip_thinking_blocks(text: str) -> str:
@@ -130,9 +131,9 @@ def call_openai_compatible_chat(messages: list[dict[str, str]], config: LLMGener
         "model": config.model,
         "messages": messages,
         "temperature": config.temperature,
-        "max_tokens": config.max_tokens,
         "stream": False,
     }
+    payload[config.token_parameter] = config.max_tokens
     data = json.dumps(payload).encode("utf-8")
     headers = {"Content-Type": "application/json"}
     if config.api_key:

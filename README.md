@@ -147,6 +147,7 @@ export OPENAI_API_KEY="your_api_key_here"
 EVALRAG_GENERATOR=openai_compatible \
 EVALRAG_LLM_BASE_URL=https://api.openai.com/v1 \
 EVALRAG_LLM_MODEL=gpt-5.4-mini \
+EVALRAG_LLM_TOKEN_PARAMETER=max_completion_tokens \
 python3 scripts/query.py "Revenue increased but 7-day retention dropped. Should we launch?" --show-metadata
 ```
 
@@ -156,6 +157,7 @@ For API-based eval, start small to control cost:
 EVALRAG_GENERATOR=openai_compatible \
 EVALRAG_LLM_BASE_URL=https://api.openai.com/v1 \
 EVALRAG_LLM_MODEL=gpt-5.4-mini \
+EVALRAG_LLM_TOKEN_PARAMETER=max_completion_tokens \
 python3 scripts/run_eval.py --limit 5 --save-records logs/openai_eval_sample5.json
 ```
 

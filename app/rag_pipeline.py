@@ -318,6 +318,7 @@ class EvalRAGPipeline:
                 temperature=settings.llm_temperature,
                 max_tokens=settings.llm_max_tokens,
                 timeout_seconds=settings.llm_timeout_seconds,
+                token_parameter=settings.llm_token_parameter,
             )
             try:
                 answer = generate_llm_answer(question, retrieved, decision, llm_config, tool_summary)

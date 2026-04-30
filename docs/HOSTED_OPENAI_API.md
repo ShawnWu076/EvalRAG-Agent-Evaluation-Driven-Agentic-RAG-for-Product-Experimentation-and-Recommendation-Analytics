@@ -21,6 +21,7 @@ cd ~/Documents/EvalRAG-Agent
 EVALRAG_GENERATOR=openai_compatible \
 EVALRAG_LLM_BASE_URL=https://api.openai.com/v1 \
 EVALRAG_LLM_MODEL=gpt-5.4-mini \
+EVALRAG_LLM_TOKEN_PARAMETER=max_completion_tokens \
 python scripts/query.py "Revenue increased by 5%, but 7-day retention dropped by 2%. Should we launch?" --show-metadata
 ```
 
@@ -37,6 +38,7 @@ generator_backend: openai_compatible
 EVALRAG_GENERATOR=openai_compatible \
 EVALRAG_LLM_BASE_URL=https://api.openai.com/v1 \
 EVALRAG_LLM_MODEL=gpt-5.4-mini \
+EVALRAG_LLM_TOKEN_PARAMETER=max_completion_tokens \
 python scripts/analyze_csv.py data/synthetic/guardrail_failure.csv --show-tools
 ```
 
@@ -48,6 +50,7 @@ API eval costs money because each eval question calls the model. Start with a sm
 EVALRAG_GENERATOR=openai_compatible \
 EVALRAG_LLM_BASE_URL=https://api.openai.com/v1 \
 EVALRAG_LLM_MODEL=gpt-5.4-mini \
+EVALRAG_LLM_TOKEN_PARAMETER=max_completion_tokens \
 python scripts/run_eval.py --limit 5 --save-records logs/openai_eval_sample5.json
 ```
 
@@ -63,6 +66,7 @@ Run the full 25-question eval only after the sample looks good:
 EVALRAG_GENERATOR=openai_compatible \
 EVALRAG_LLM_BASE_URL=https://api.openai.com/v1 \
 EVALRAG_LLM_MODEL=gpt-5.4-mini \
+EVALRAG_LLM_TOKEN_PARAMETER=max_completion_tokens \
 python scripts/run_eval.py --save-records logs/openai_eval_full.json
 ```
 

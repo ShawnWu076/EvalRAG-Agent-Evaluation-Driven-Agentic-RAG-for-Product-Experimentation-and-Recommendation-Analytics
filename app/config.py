@@ -38,6 +38,7 @@ class Settings:
     llm_api_key: str = _default_llm_api_key()
     llm_temperature: float = float(os.getenv("EVALRAG_LLM_TEMPERATURE", "0.2"))
     llm_max_tokens: int = int(os.getenv("EVALRAG_LLM_MAX_TOKENS", "1400"))
+    llm_token_parameter: str = os.getenv("EVALRAG_LLM_TOKEN_PARAMETER", "max_tokens")
     llm_timeout_seconds: float = float(os.getenv("EVALRAG_LLM_TIMEOUT_SECONDS", "90"))
     llm_fallback_enabled: bool = _env_bool("EVALRAG_LLM_FALLBACK_ENABLED", True)
     top_k: int = int(os.getenv("EVALRAG_TOP_K", "5"))
