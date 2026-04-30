@@ -30,13 +30,29 @@ class PolicyValidatorTests(unittest.TestCase):
         self.assertEqual(result["policy_action"], "confirm")
         self.assertEqual(result["final_decision"], "investigate_further")
 
-    def test_clean_win_does_not_trigger_policy(self) -> None:
+    def test_clean_win_supports_launch(self) -> None:
         result = validate_decision(
             "Revenue is significantly up, retention is stable, complaints are stable, and SRM passed.",
+            "investigate_further",
+        )
+        self.assertTrue(result["policy_triggered"])
+        self.assertEqual(result["policy_action"], "override")
+        self.assertEqual(result["final_decision"], "launch")
+
+    def test_ads_quality_drop_requires_investigation(self) -> None:
+        result = validate_decision(
+            "An ads experiment increased CTR but lowered advertiser conversion quality and ROAS.",
+            "do_not_launch",
+        )
+        self.assertEqual(result["policy_decision"], "investigate_further")
+        self.assertEqual(result["final_decision"], "investigate_further")
+
+    def test_confidence_interval_downside_requires_investigation(self) -> None:
+        result = validate_decision(
+            "The primary metric improved, but the confidence interval includes meaningful downside on retention.",
             "launch",
         )
-        self.assertFalse(result["policy_triggered"])
-        self.assertEqual(result["final_decision"], "launch")
+        self.assertEqual(result["policy_decision"], "investigate_further")
 
 
 if __name__ == "__main__":

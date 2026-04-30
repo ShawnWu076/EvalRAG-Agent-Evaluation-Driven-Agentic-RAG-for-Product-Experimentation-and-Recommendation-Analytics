@@ -37,9 +37,11 @@ Current policy checks include:
 - Non-random rollout, one-city rollout, pre/post setup -> `use_did_or_quasi_experiment`
 - Critical guardrail regression, such as retention or complaint harm -> `investigate_further`
 - Important segment harm, such as high-value or Android/Germany harm -> `partial_rollout`
-- CTR or click gains with conversion quality loss -> `investigate_further`
+- CTR or click gains with conversion quality, ROAS, revenue, or downstream value loss -> `investigate_further`
 - Unsupported fixed guardrail thresholds -> `investigate_further`
+- Statistical uncertainty or confidence intervals with meaningful downside -> `investigate_further`
 - Missing primary metric or guardrails -> `investigate_further`
+- Clean wins with stable guardrails and validity checks -> `launch`
 
 If a policy triggers, the record stores:
 
@@ -127,6 +129,7 @@ python scripts/run_eval.py --retrieval-only
 - `policy_override_rate`: how often policy changed the LLM decision
 - `policy_correction_rate`: how often policy fixed an incorrect LLM decision
 - `policy_regression_rate`: how often policy changed a correct LLM decision into an incorrect final decision
+- `concept_failure_threshold`: concept coverage threshold below which a record is surfaced in failures; currently `0.8`
 
 The saved failure records also include `failure_hypothesis`, with rough categories such as:
 

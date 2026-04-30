@@ -248,7 +248,7 @@ Current retrieval metrics include:
 
 Answer metrics include:
 
-- `concept_coverage`
+- `concept_coverage`: deterministic exact-or-semantic token coverage of expected concepts
 - `llm_decision_accuracy`
 - `policy_decision_accuracy_when_triggered`
 - `final_decision_accuracy`
@@ -281,8 +281,8 @@ Optional section when a hard policy confirms or overrides the LLM proposal.
 ## Current Limitations
 
 - The playbook is still being expanded and refined.
-- Concept coverage currently uses simple text matching, so semantically correct paraphrases may be undercounted.
-- The policy validator is conservative and deterministic; future work should move hard constraints into a more structured policy layer.
+- Concept coverage now uses deterministic exact, stemmed token-overlap, and fuzzy phrase-window matching; it is more forgiving than exact strings but still not a full LLM judge.
+- The policy validator is conservative and deterministic; it now records structured policy IDs, priorities, and blocking/supportive findings, but future work should externalize these rules into a configurable policy layer.
 - The statistical tools are lightweight approximations intended for synthetic demo data, not production experimentation infrastructure.
 - Retrieval uses a dependency-light hashed-vector method, not a production embedding database or reranker.
 

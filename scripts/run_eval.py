@@ -15,6 +15,8 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+CONCEPT_FAILURE_THRESHOLD = 0.8
+
 from app.config import settings  # noqa: E402
 from app.rag_pipeline import EvalRAGPipeline, evaluate_trace  # noqa: E402
 
@@ -89,7 +91,7 @@ def _failure_hypothesis(record: dict[str, Any]) -> str | None:
     if evaluation.get("decision_correct") is False and evaluation.get("policy_override"):
         return "policy_validator_overreach"
     concept_coverage = evaluation.get("concept_coverage")
-    if concept_coverage is not None and concept_coverage < 1.0:
+    if concept_coverage is not None and concept_coverage < CONCEPT_FAILURE_THRESHOLD:
         return "answer_concept_coverage_gap"
     return None
 
@@ -189,6 +191,8 @@ def run_eval(
             "matched_sources": record["evaluation"]["matched_sources"],
             "missing_sources": record["evaluation"]["missing_sources"],
             "concept_coverage": record["evaluation"].get("concept_coverage"),
+            "missing_concepts": record["evaluation"].get("missing_concepts", []),
+            "concept_matches": record["evaluation"].get("concept_matches", []),
             "top_sources": [chunk["source"] for chunk in record["retrieved_chunks"][:3]],
             "policy_action": record.get("policy_validation", {}).get("policy_action"),
             "policy_findings": record.get("policy_validation", {}).get("policy_findings", []),
@@ -200,7 +204,7 @@ def run_eval(
         if record["evaluation"].get("all_expected_sources_found") is False
         or record["evaluation"].get("top1_source_match") is False
         or record["evaluation"].get("decision_correct") is False
-        or (record["evaluation"].get("concept_coverage") is not None and record["evaluation"].get("concept_coverage") < 1.0)
+        or (record["evaluation"].get("concept_coverage") is not None and record["evaluation"].get("concept_coverage") < CONCEPT_FAILURE_THRESHOLD)
     ]
 
     if save_records is not None:
@@ -212,6 +216,7 @@ def run_eval(
         "top_k": top_k,
         "alpha": alpha,
         "generation_enabled": generation_enabled,
+        "concept_failure_threshold": CONCEPT_FAILURE_THRESHOLD,
         "metrics": {
             "source_hit_at_k": _mean(source_hit),
             "source_match_rate": _mean(source_match),

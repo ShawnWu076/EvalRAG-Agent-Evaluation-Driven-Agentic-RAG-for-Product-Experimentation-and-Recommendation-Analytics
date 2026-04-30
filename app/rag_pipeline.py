@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from app.chunking import build_chunks, load_chunks
+from app.concept_coverage import evaluate_concepts
 from app.config import PLAYBOOK_DIR, settings
 from app.llm_generator import LLMGenerationConfig, LLMGenerationError, generate_llm_answer
 from app.policy_validator import validate_decision
@@ -120,12 +121,7 @@ def evaluate_trace(
     matched_sources = [source for source in expected_sources if source in source_set]
     missing_sources = [source for source in expected_sources if source not in source_set]
     unexpected_sources = [source for source in unique_retrieved_sources if source not in expected_source_set]
-    answer_text = normalize_text(answer)
-    covered_concepts = [
-        concept
-        for concept in expected_concepts
-        if normalize_text(concept) in answer_text
-    ]
+    concept_result = evaluate_concepts(answer, expected_concepts)
     source_hit = bool(expected_source_set and matched_sources)
     source_match_rate = round(len(matched_sources) / len(expected_source_set), 4) if expected_source_set else None
     all_sources_found = len(matched_sources) == len(expected_source_set) if expected_source_set else None
@@ -151,8 +147,11 @@ def evaluate_trace(
         "matched_sources": matched_sources,
         "missing_sources": missing_sources,
         "unexpected_sources": unexpected_sources,
-        "concept_coverage": round(len(covered_concepts) / len(expected_concepts), 4) if expected_concepts else None,
-        "covered_concepts": covered_concepts,
+        "concept_coverage": concept_result["concept_coverage"],
+        "covered_concepts": concept_result["covered_concepts"],
+        "missing_concepts": concept_result["missing_concepts"],
+        "concept_matches": concept_result["concept_matches"],
+        "concept_coverage_method": concept_result["concept_coverage_method"],
         "decision_correct": decision == expected_decision if expected_available else None,
         "llm_decision_correct": llm_decision == expected_decision if expected_available and llm_decision else None,
         "policy_decision_correct": policy_decision == expected_decision if expected_available and policy_decision else None,

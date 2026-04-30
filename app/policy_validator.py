@@ -194,15 +194,64 @@ def validate_decision(
             )
         )
 
-    if _contains_any(text, ["ctr", "click", "add-to-cart", "add to cart"]) and _contains_any(
+    engagement_up = _contains_any(text, ["ctr", "click", "add-to-cart", "add to cart", "engagement", "watch time"])
+    downstream_quality_down = _contains_any(
         text,
-        ["conversion rate decreased", "conversion decreased", "conversion down", "cvr down", "lowered purchase conversion", "purchase conversion"],
-    ):
+        [
+            "conversion rate decreased",
+            "conversion decreased",
+            "conversion down",
+            "cvr down",
+            "lowered purchase conversion",
+            "purchase conversion",
+            "revenue flat",
+            "revenue is flat",
+            "revenue down",
+            "revenue decreased",
+            "traffic quality",
+        ],
+    )
+    ads_quality_down = _contains_any(text, ["ads", "ad ", "advertiser", "ad load"]) and _contains_any(
+        text,
+        [
+            "conversion quality",
+            "advertiser conversion",
+            "roas",
+            "return on ad spend",
+            "advertiser value",
+            "unsubscribe rate",
+            "complaints",
+        ],
+    ) and _contains_any(text, ["lower", "lowered", "down", "decreased", "dropped", "worse", "worsened", "reduced"])
+    if engagement_up and (downstream_quality_down or ads_quality_down):
         findings.append(
             _finding(
                 "engagement_lift_with_quality_drop_requires_investigation",
                 "investigate_further",
-                "Click or engagement gains are insufficient when conversion quality, purchase conversion, revenue, or downstream value worsens.",
+                "Engagement or CTR gains are insufficient when conversion quality, advertiser value, revenue, ROAS, or downstream user value worsens.",
+                "question_text",
+                DECISION_PRIORITIES["investigate_further"],
+            )
+        )
+
+    if _contains_any(
+        text,
+        [
+            "confidence interval includes meaningful downside",
+            "confidence interval includes downside",
+            "ci includes downside",
+            "confidence interval crosses",
+            "not statistically significant",
+            "underpowered",
+            "low power",
+            "wide confidence interval",
+        ],
+    ):
+        findings.append(
+            _finding(
+                "statistical_uncertainty_requires_investigation",
+                "investigate_further",
+                "Material uncertainty or meaningful downside in confidence intervals should block confident launch until the risk is quantified or the experiment is extended.",
                 "question_text",
                 DECISION_PRIORITIES["investigate_further"],
             )
@@ -227,6 +276,50 @@ def validate_decision(
                 "Launch evidence is weaker when primary metrics or guardrails were not predefined before interpreting results.",
                 "question_text",
                 DECISION_PRIORITIES["investigate_further"],
+            )
+        )
+
+    primary_win = _contains_any(
+        text,
+        [
+            "clean win",
+            "revenue increased",
+            "revenue is significantly up",
+            "revenue significantly up",
+            "conversion improved",
+            "conversion is up",
+            "primary metric improved",
+            "all major metrics good",
+        ],
+    )
+    stable_evidence_count = sum(
+        1
+        for term in [
+            "retention stable",
+            "retention is stable",
+            "complaints stable",
+            "complaints are stable",
+            "guardrails stable",
+            "all guardrails stable",
+            "no guardrail regression",
+            "no guardrail regressions",
+            "srm passed",
+            "segment checks show no harm",
+            "segments show no harm",
+            "no harm",
+        ]
+        if term in text
+    )
+    has_blocking_finding = any(finding["recommended_decision"] != "launch" for finding in findings)
+    if primary_win and stable_evidence_count >= 2 and not has_blocking_finding:
+        findings.append(
+            _finding(
+                "clean_win_supports_launch",
+                "launch",
+                "Primary metrics improved while key guardrails and validity checks appear stable, so launch is reasonable with monitoring.",
+                "question_text",
+                DECISION_PRIORITIES["launch"],
+                severity="supportive",
             )
         )
 
