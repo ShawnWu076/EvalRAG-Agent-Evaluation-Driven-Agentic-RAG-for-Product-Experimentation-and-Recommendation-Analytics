@@ -26,7 +26,7 @@ class LLMGeneratorTests(unittest.TestCase):
         text = "<think>hidden reasoning</think>## Short Answer\nUse the memo."
         self.assertEqual(strip_thinking_blocks(text), "## Short Answer\nUse the memo.")
 
-    def test_build_messages_includes_decision_and_sources(self) -> None:
+    def test_build_messages_includes_allowed_decisions_and_sources(self) -> None:
         messages = build_llm_messages(
             "Revenue increased but retention dropped. Should we launch?",
             [
@@ -38,12 +38,14 @@ class LLMGeneratorTests(unittest.TestCase):
                     "text": "Retention is a guardrail metric.",
                 }
             ],
-            "investigate_further",
+            allowed_decisions=["investigate_further", "launch"],
         )
         prompt = messages[-1]["content"]
         self.assertIn("investigate_further", prompt)
+        self.assertIn("launch", prompt)
         self.assertIn("guardrail_metrics.md", prompt)
         self.assertIn("Retention is a guardrail metric", prompt)
+        self.assertNotIn("Required decision label", prompt)
 
     def test_chat_request_uses_configured_token_parameter(self) -> None:
         captured_payload: dict = {}

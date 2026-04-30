@@ -2,15 +2,15 @@
 
 Evaluation-driven agentic RAG for product experimentation and recommendation analytics.
 
-EvalRAG Agent turns product experiment questions into structured, source-grounded launch memos. It retrieves from a small experimentation playbook, logs retrieved chunks and scores, evaluates answer quality, and can summarize synthetic A/B test CSVs with statistical tools.
+EvalRAG Agent turns product experiment questions into structured, source-grounded launch memos. It retrieves from a small experimentation playbook, calls an OpenAI-compatible LLM to synthesize the answer and decision label, logs retrieved chunks and scores, evaluates answer quality, and can summarize synthetic A/B test CSVs with statistical tools.
 
 ## What This Project Demonstrates
 
 - RAG over a domain playbook instead of a generic PDF chatbot.
 - Hybrid retrieval with BM25 plus hashed-vector scoring.
-- Structured launch memos with explicit decision labels.
+- LLM-generated launch memos with explicit, parseable decision labels.
 - Telemetry for query, retrieved chunks, scores, latency, and answer.
-- Evaluation harness for source hit rate, source match rate, concept coverage, decision accuracy, and MRR.
+- Evaluation harness for source hit rate, source match rate, all-sources-found rate, top-1 source match, source precision@K, concept coverage, decision accuracy, and MRR.
 - Agentic extension with SRM checks, metric lifts, significance approximations, and segment analysis over CSV data.
 
 ## Why Evaluation-Driven RAG
@@ -33,6 +33,9 @@ EvalRAG evaluates three failure modes:
 
    - Hit@K
    - Source match rate
+   - All expected sources found rate
+   - Top-1 source match rate
+   - Source precision@K
    - Mean reciprocal rank
 
 2. **Grounding / reasoning failure**
@@ -97,6 +100,7 @@ The core build/eval/stat scripts are dependency-light and run with the Python st
 
 ```bash
 python3 scripts/build_index.py
+export OPENAI_API_KEY="your_api_key_here"
 python3 scripts/query.py "Revenue increased but 7-day retention dropped. Should we launch?" --show-metadata
 python3 scripts/analyze_csv.py data/synthetic/guardrail_failure.csv --show-tools
 python3 scripts/run_eval.py
@@ -123,23 +127,9 @@ curl -X POST http://127.0.0.1:8000/ask \
   -d '{"question":"Revenue increased but 7-day retention dropped. Should we launch?"}'
 ```
 
-## Optional Local LLM Generation
+## LLM Generation
 
-By default, EvalRAG uses a deterministic `rule` generator so the project can run without an LLM server. You can switch generation to a local OpenAI-compatible endpoint such as Ollama or LM Studio:
-
-```bash
-EVALRAG_GENERATOR=local_llm \
-EVALRAG_LLM_BASE_URL=http://localhost:11434/v1 \
-EVALRAG_LLM_MODEL=qwen3:8b \
-EVALRAG_LLM_API_KEY=ollama \
-python3 scripts/query.py "Revenue increased but 7-day retention dropped. Should we launch?" --show-metadata
-```
-
-For LM Studio, use `http://localhost:1234/v1` and the model id shown in the LM Studio Developer tab. See `docs/LOCAL_LLM.md` for details.
-
-## Optional Hosted OpenAI API Generation
-
-The same OpenAI-compatible generator can point to the hosted OpenAI API. Keep your key in an environment variable:
+By default, EvalRAG uses an OpenAI-compatible LLM generator. The primary default points to the hosted OpenAI API, and the fallback default points to local Ollama with `qwen3:8b`. Keep your hosted key in an environment variable:
 
 ```bash
 export OPENAI_API_KEY="your_api_key_here"
@@ -151,7 +141,7 @@ EVALRAG_LLM_TOKEN_PARAMETER=max_completion_tokens \
 python3 scripts/query.py "Revenue increased but 7-day retention dropped. Should we launch?" --show-metadata
 ```
 
-For API-based eval, start small to control cost:
+For API-based eval, start small to inspect quality and cost:
 
 ```bash
 EVALRAG_GENERATOR=openai_compatible \
@@ -212,10 +202,16 @@ Run:
 python3 scripts/run_eval.py --top-k 5
 ```
 
-Compare retrieval settings:
+Compare retrieval settings without calling an LLM:
 
 ```bash
 python3 scripts/compare_retrievers.py
+```
+
+Run retrieval-only eval when you want to debug search quality without generation cost:
+
+```bash
+python3 scripts/run_eval.py --retrieval-only
 ```
 
 The goal is to make quality visible:
@@ -226,4 +222,4 @@ Build -> Log -> Evaluate -> Diagnose -> Optimize
 
 ## Notes
 
-The default answer generator is deterministic so the project can run without an LLM key. In a production version, replace or augment `generate_structured_answer()` with an LLM call using the same retrieved chunks, tool outputs, output schema, and telemetry record.
+The deterministic memo generator has been removed. The current pipeline expects an OpenAI-compatible LLM endpoint, extracts the final decision label from the generated memo, and falls back to local `qwen3:8b` when the hosted call fails and Ollama is available.

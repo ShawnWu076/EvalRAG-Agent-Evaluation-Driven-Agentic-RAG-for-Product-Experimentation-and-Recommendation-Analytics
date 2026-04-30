@@ -1,4 +1,4 @@
-"""OpenAI-compatible local LLM answer generation."""
+"""OpenAI-compatible LLM answer generation."""
 
 from __future__ import annotations
 
@@ -60,13 +60,22 @@ def _format_tool_summary(tool_summary: dict[str, Any] | None) -> str:
 def build_llm_messages(
     question: str,
     retrieved: list[dict[str, Any]],
-    decision: str,
     tool_summary: dict[str, Any] | None = None,
+    allowed_decisions: list[str] | None = None,
 ) -> list[dict[str, str]]:
     """Build a grounded prompt for a local or hosted OpenAI-compatible chat model."""
 
+    allowed_decisions = allowed_decisions or [
+        "launch",
+        "do_not_launch",
+        "investigate_further",
+        "partial_rollout",
+        "do_not_trust_result",
+        "use_did_or_quasi_experiment",
+    ]
     sources = ", ".join(dict.fromkeys(str(item.get("source", "unknown")) for item in retrieved))
-    system = """You are EvalRAG Agent, an analytics copilot for product experimentation and recommendation analytics.
+    decision_lines = "\n".join(f"- `{decision}`" for decision in allowed_decisions)
+    system = """You are EvalRAG Agent, an analytics copilot for product experimentation analytics.
 
 Your job is to write a concise, source-grounded launch decision memo using only:
 1. the user question,
@@ -74,20 +83,20 @@ Your job is to write a concise, source-grounded launch decision memo using only:
 3. statistical tool outputs when provided.
 
 Rules:
-- Keep the final decision label exactly as provided by the system.
+- Choose exactly one final decision label from the allowed decision labels.
+- The Decision Recommendation section must contain exactly one allowed label in backticks.
 - Do not invent exact thresholds, company policies, p-values, or metric results that are not present.
 - If evidence is missing, say what is missing and how it affects the decision.
 - If SRM, logging, assignment, or validity checks fail, do not treat metric lift as causal launch evidence.
 - Cite retrieved source filenames in the Retrieved Sources section.
 - Do not include chain-of-thought. If the model supports non-thinking mode, use /no_think.
-- Do not repeat instruction text such as "Use exactly this label" in the final answer.
 - Return markdown only.
 """
     user = f"""User question:
 {question}
 
-Required decision label:
-`{decision}`
+Allowed decision labels:
+{decision_lines}
 
 Retrieved playbook context:
 {_format_retrieved_context(retrieved)}
@@ -100,7 +109,7 @@ Write the answer in exactly this structure:
 ## Short Answer
 
 ## Decision Recommendation
-`{decision}`
+`one_allowed_decision_label`
 
 ## Reasoning
 
@@ -169,13 +178,15 @@ def call_openai_compatible_chat(messages: list[dict[str, str]], config: LLMGener
 def generate_llm_answer(
     question: str,
     retrieved: list[dict[str, Any]],
-    decision: str,
     config: LLMGenerationConfig,
     tool_summary: dict[str, Any] | None = None,
+    allowed_decisions: list[str] | None = None,
 ) -> str:
-    messages = build_llm_messages(question, retrieved, decision, tool_summary)
+    messages = build_llm_messages(question, retrieved, tool_summary, allowed_decisions)
     answer = call_openai_compatible_chat(messages, config)
     if "## Retrieved Sources" not in answer:
-        sources = "\n".join(f"- {source}" for source in dict.fromkeys(str(item.get("source", "unknown")) for item in retrieved))
+        sources = "\n".join(
+            f"- {source}" for source in dict.fromkeys(str(item.get("source", "unknown")) for item in retrieved)
+        )
         answer = answer.rstrip() + f"\n\n## Retrieved Sources\n{sources}\n"
     return answer

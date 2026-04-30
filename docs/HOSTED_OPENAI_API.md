@@ -1,6 +1,6 @@
 # Hosted OpenAI API Setup
 
-EvalRAG can use the hosted OpenAI API through the same OpenAI-compatible chat-completions layer used for Ollama and LM Studio. Retrieval, statistical tools, telemetry, and evaluation stay the same; only the answer generator changes.
+EvalRAG can use the hosted OpenAI API through the same OpenAI-compatible chat-completions layer used for Ollama and LM Studio. Retrieval, statistical tools, telemetry, and evaluation stay the same; the primary answer generator is the hosted model by default.
 
 ## 1. Set Your API Key
 
@@ -31,6 +31,8 @@ Expected metadata:
 model: gpt-5.4-mini
 generator_backend: openai_compatible
 ```
+
+If the hosted call fails but Ollama is running with `qwen3:8b`, metadata will show `generator_backend: local_llm_fallback`.
 
 ## 3. Run CSV Analysis
 

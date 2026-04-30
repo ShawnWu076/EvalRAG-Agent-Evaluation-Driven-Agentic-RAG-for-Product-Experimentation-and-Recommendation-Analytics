@@ -27,7 +27,7 @@ def main() -> None:
     if args.show_metadata:
         print("\n## Generation Metadata")
         print(f"model: {record['model']}")
-        print(f"generator_backend: {record.get('generator_backend', 'rule')}")
+        print(f"generator_backend: {record.get('generator_backend', 'openai_compatible')}")
         if record.get("generator_error"):
             print(f"generator_error: {record['generator_error']}")
 

@@ -24,23 +24,33 @@ def _env_bool(name: str, default: bool = False) -> bool:
 
 
 def _default_llm_api_key() -> str:
-    return os.getenv("EVALRAG_LLM_API_KEY") or os.getenv("OPENAI_API_KEY") or "ollama"
+    return os.getenv("EVALRAG_LLM_API_KEY") or os.getenv("OPENAI_API_KEY") or ""
+
+
+def _default_fallback_llm_api_key() -> str:
+    return os.getenv("EVALRAG_FALLBACK_LLM_API_KEY") or "ollama"
 
 
 @dataclass(frozen=True)
 class Settings:
     """Runtime settings with environment-variable overrides."""
 
-    model_name: str = os.getenv("EVALRAG_MODEL", "local-rule-generator")
-    generator_backend: str = os.getenv("EVALRAG_GENERATOR", "rule").strip().lower()
-    llm_base_url: str = os.getenv("EVALRAG_LLM_BASE_URL", "http://localhost:11434/v1")
-    llm_model: str = os.getenv("EVALRAG_LLM_MODEL", "qwen3:8b")
+    generator_backend: str = os.getenv("EVALRAG_GENERATOR", "openai_compatible").strip().lower()
+    llm_base_url: str = os.getenv("EVALRAG_LLM_BASE_URL", "https://api.openai.com/v1")
+    llm_model: str = os.getenv("EVALRAG_LLM_MODEL", "gpt-5.4-mini")
     llm_api_key: str = _default_llm_api_key()
     llm_temperature: float = float(os.getenv("EVALRAG_LLM_TEMPERATURE", "0.2"))
     llm_max_tokens: int = int(os.getenv("EVALRAG_LLM_MAX_TOKENS", "1400"))
-    llm_token_parameter: str = os.getenv("EVALRAG_LLM_TOKEN_PARAMETER", "max_tokens")
+    llm_token_parameter: str = os.getenv("EVALRAG_LLM_TOKEN_PARAMETER", "max_completion_tokens")
     llm_timeout_seconds: float = float(os.getenv("EVALRAG_LLM_TIMEOUT_SECONDS", "90"))
     llm_fallback_enabled: bool = _env_bool("EVALRAG_LLM_FALLBACK_ENABLED", True)
+    fallback_llm_base_url: str = os.getenv("EVALRAG_FALLBACK_LLM_BASE_URL", "http://localhost:11434/v1")
+    fallback_llm_model: str = os.getenv("EVALRAG_FALLBACK_LLM_MODEL", "qwen3:8b")
+    fallback_llm_api_key: str = _default_fallback_llm_api_key()
+    fallback_llm_temperature: float = float(os.getenv("EVALRAG_FALLBACK_LLM_TEMPERATURE", "0.2"))
+    fallback_llm_max_tokens: int = int(os.getenv("EVALRAG_FALLBACK_LLM_MAX_TOKENS", "1400"))
+    fallback_llm_token_parameter: str = os.getenv("EVALRAG_FALLBACK_LLM_TOKEN_PARAMETER", "max_tokens")
+    fallback_llm_timeout_seconds: float = float(os.getenv("EVALRAG_FALLBACK_LLM_TIMEOUT_SECONDS", "120"))
     top_k: int = int(os.getenv("EVALRAG_TOP_K", "5"))
     chunk_size: int = int(os.getenv("EVALRAG_CHUNK_SIZE", "420"))
     chunk_overlap: int = int(os.getenv("EVALRAG_CHUNK_OVERLAP", "80"))
@@ -49,7 +59,7 @@ class Settings:
     chunk_semantic_device: str = os.getenv("EVALRAG_CHUNK_SEMANTIC_DEVICE", "cpu")
     chunk_semantic_offline: bool = _env_bool("EVALRAG_CHUNK_SEMANTIC_OFFLINE", True)
     chunk_semantic_min_size: int = int(os.getenv("EVALRAG_CHUNK_SEMANTIC_MIN_SIZE", "160"))
-    hybrid_alpha: float = float(os.getenv("EVALRAG_HYBRID_ALPHA", "0.65"))
+    hybrid_alpha: float = float(os.getenv("EVALRAG_HYBRID_ALPHA", "0.35"))
     log_path: Path = Path(os.getenv("EVALRAG_LOG_PATH", DEFAULT_LOG_PATH))
     index_path: Path = Path(os.getenv("EVALRAG_INDEX_PATH", DEFAULT_INDEX_PATH))
 

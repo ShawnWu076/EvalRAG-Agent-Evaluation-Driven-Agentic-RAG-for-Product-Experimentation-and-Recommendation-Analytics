@@ -198,7 +198,7 @@ curl -X POST http://127.0.0.1:8000/analyze \
 ## What Still Needs Improvement
 
 1. Add a real LLM generation path:
-   - The current answer generator is a deterministic rule-based fallback.
+   - Historical note: the initial prototype used a deterministic memo fallback; the current pipeline uses an OpenAI-compatible LLM with local Qwen fallback.
    - Next, add an optional OpenAI-powered generator using retrieved chunks and tool outputs.
 
 2. Add real embeddings and a vector database:
