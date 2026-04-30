@@ -1,26 +1,18 @@
-"""Dependency-light document chunking and hybrid retrieval."""
+"""Dependency-light retrieval over pre-built chunks."""
 
 from __future__ import annotations
 
 import hashlib
-import json
 import math
 import re
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
-from pathlib import Path
 from typing import Iterable
+
+from app.chunking import DocumentChunk
 
 
 TOKEN_RE = re.compile(r"[a-z0-9]+(?:[._-][a-z0-9]+)?")
-
-
-@dataclass(frozen=True)
-class DocumentChunk:
-    chunk_id: str
-    source: str
-    heading: str
-    text: str
 
 
 @dataclass(frozen=True)
@@ -39,99 +31,6 @@ def tokenize(text: str) -> list[str]:
     """Normalize text into retrieval tokens."""
 
     return TOKEN_RE.findall(text.lower())
-
-
-def _stable_chunk_id(source: str, ordinal: int) -> str:
-    stem = Path(source).stem
-    return f"{stem}_{ordinal:03d}"
-
-
-def load_markdown_documents(playbook_dir: Path) -> list[tuple[str, str]]:
-    docs: list[tuple[str, str]] = []
-    for path in sorted(playbook_dir.glob("*.md")):
-        docs.append((path.name, path.read_text(encoding="utf-8")))
-    return docs
-
-
-def chunk_markdown(source: str, text: str, chunk_size: int = 420, overlap: int = 80) -> list[DocumentChunk]:
-    """Chunk markdown by heading-aware paragraph windows."""
-
-    chunks: list[DocumentChunk] = []
-    heading = Path(source).stem.replace("_", " ").title()
-    paragraphs: list[tuple[str, str]] = []
-
-    for raw_block in re.split(r"\n\s*\n", text.strip()):
-        block = raw_block.strip()
-        if not block:
-            continue
-        if block.startswith("#"):
-            heading = block.lstrip("#").strip() or heading
-            continue
-        paragraphs.append((heading, block))
-
-    current_heading = heading
-    current_words: list[str] = []
-    ordinal = 1
-
-    def flush() -> None:
-        nonlocal ordinal, current_words, current_heading
-        if not current_words:
-            return
-        chunk_text = " ".join(current_words).strip()
-        chunks.append(
-            DocumentChunk(
-                chunk_id=_stable_chunk_id(source, ordinal),
-                source=source,
-                heading=current_heading,
-                text=chunk_text,
-            )
-        )
-        ordinal += 1
-        current_words = current_words[-overlap:] if overlap > 0 else []
-
-    for para_heading, paragraph in paragraphs:
-        words = paragraph.split()
-        if para_heading != current_heading and current_words:
-            flush()
-        current_heading = para_heading
-        if len(words) > chunk_size:
-            for start in range(0, len(words), max(1, chunk_size - overlap)):
-                window = words[start : start + chunk_size]
-                chunks.append(
-                    DocumentChunk(
-                        chunk_id=_stable_chunk_id(source, ordinal),
-                        source=source,
-                        heading=current_heading,
-                        text=" ".join(window),
-                    )
-                )
-                ordinal += 1
-            current_words = []
-            continue
-        if len(current_words) + len(words) > chunk_size:
-            flush()
-        current_words.extend(words)
-
-    flush()
-    return chunks
-
-
-def build_chunks(playbook_dir: Path, chunk_size: int = 420, overlap: int = 80) -> list[DocumentChunk]:
-    chunks: list[DocumentChunk] = []
-    for source, text in load_markdown_documents(playbook_dir):
-        chunks.extend(chunk_markdown(source, text, chunk_size=chunk_size, overlap=overlap))
-    return chunks
-
-
-def save_chunks(chunks: Iterable[DocumentChunk], index_path: Path) -> None:
-    index_path.parent.mkdir(parents=True, exist_ok=True)
-    payload = [asdict(chunk) for chunk in chunks]
-    index_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-
-
-def load_chunks(index_path: Path) -> list[DocumentChunk]:
-    payload = json.loads(index_path.read_text(encoding="utf-8"))
-    return [DocumentChunk(**item) for item in payload]
 
 
 def _hash_token(token: str, dimensions: int) -> tuple[int, float]:
@@ -216,8 +115,27 @@ class SimpleHybridRetriever:
             scored.append((final_score, bm25_score, vector_score, index))
 
         scored.sort(key=lambda item: item[0], reverse=True)
+        selected: list[tuple[float, float, float, int]] = []
+        seen_sources: set[str] = set()
+        for item in scored:
+            source = self.chunks[item[3]].source
+            if source in seen_sources:
+                continue
+            selected.append(item)
+            seen_sources.add(source)
+            if len(selected) == top_k:
+                break
+        if len(selected) < top_k:
+            selected_indices = {item[3] for item in selected}
+            for item in scored:
+                if item[3] in selected_indices:
+                    continue
+                selected.append(item)
+                if len(selected) == top_k:
+                    break
+
         results: list[RetrievalResult] = []
-        for rank, (score, bm25_score, vector_score, index) in enumerate(scored[:top_k], start=1):
+        for rank, (score, bm25_score, vector_score, index) in enumerate(selected, start=1):
             chunk = self.chunks[index]
             results.append(
                 RetrievalResult(

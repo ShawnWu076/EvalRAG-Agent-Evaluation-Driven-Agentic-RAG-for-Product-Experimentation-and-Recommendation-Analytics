@@ -16,6 +16,13 @@ LOG_DIR = PROJECT_ROOT / "logs"
 DEFAULT_LOG_PATH = LOG_DIR / "rag_logs.jsonl"
 
 
+def _env_bool(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
 @dataclass(frozen=True)
 class Settings:
     """Runtime settings with environment-variable overrides."""
@@ -24,10 +31,14 @@ class Settings:
     top_k: int = int(os.getenv("EVALRAG_TOP_K", "5"))
     chunk_size: int = int(os.getenv("EVALRAG_CHUNK_SIZE", "420"))
     chunk_overlap: int = int(os.getenv("EVALRAG_CHUNK_OVERLAP", "80"))
+    chunk_semantic_enable: bool = _env_bool("EVALRAG_CHUNK_SEMANTIC_ENABLE", True)
+    chunk_semantic_model: str = os.getenv("EVALRAG_CHUNK_SEMANTIC_MODEL", "BAAI/bge-small-en-v1.5")
+    chunk_semantic_device: str = os.getenv("EVALRAG_CHUNK_SEMANTIC_DEVICE", "cpu")
+    chunk_semantic_offline: bool = _env_bool("EVALRAG_CHUNK_SEMANTIC_OFFLINE", True)
+    chunk_semantic_min_size: int = int(os.getenv("EVALRAG_CHUNK_SEMANTIC_MIN_SIZE", "160"))
     hybrid_alpha: float = float(os.getenv("EVALRAG_HYBRID_ALPHA", "0.65"))
     log_path: Path = Path(os.getenv("EVALRAG_LOG_PATH", DEFAULT_LOG_PATH))
     index_path: Path = Path(os.getenv("EVALRAG_INDEX_PATH", DEFAULT_INDEX_PATH))
 
 
 settings = Settings()
-

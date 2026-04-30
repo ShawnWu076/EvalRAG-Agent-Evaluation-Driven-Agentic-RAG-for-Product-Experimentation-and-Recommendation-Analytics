@@ -8,11 +8,10 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
+from app.chunking import build_chunks, load_chunks
 from app.config import PLAYBOOK_DIR, settings
 from app.retrieval import (
     SimpleHybridRetriever,
-    build_chunks,
-    load_chunks,
     results_to_dicts,
 )
 from app.telemetry import append_log, new_query_id, utc_timestamp
@@ -281,7 +280,16 @@ class EvalRAGPipeline:
         if self.index_path.exists():
             chunks = load_chunks(self.index_path)
         else:
-            chunks = build_chunks(playbook_dir, settings.chunk_size, settings.chunk_overlap)
+            chunks = build_chunks(
+                playbook_dir,
+                settings.chunk_size,
+                settings.chunk_overlap,
+                semantic_enabled=settings.chunk_semantic_enable,
+                semantic_model=settings.chunk_semantic_model,
+                semantic_device=settings.chunk_semantic_device,
+                semantic_offline=settings.chunk_semantic_offline,
+                semantic_min_size=settings.chunk_semantic_min_size,
+            )
         self.retriever = SimpleHybridRetriever(chunks, alpha=self.alpha)
 
     def answer(
