@@ -23,6 +23,10 @@ def _env_bool(name: str, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
+def _default_llm_api_key() -> str:
+    return os.getenv("EVALRAG_LLM_API_KEY") or os.getenv("OPENAI_API_KEY") or "ollama"
+
+
 @dataclass(frozen=True)
 class Settings:
     """Runtime settings with environment-variable overrides."""
@@ -31,7 +35,7 @@ class Settings:
     generator_backend: str = os.getenv("EVALRAG_GENERATOR", "rule").strip().lower()
     llm_base_url: str = os.getenv("EVALRAG_LLM_BASE_URL", "http://localhost:11434/v1")
     llm_model: str = os.getenv("EVALRAG_LLM_MODEL", "qwen3:8b")
-    llm_api_key: str = os.getenv("EVALRAG_LLM_API_KEY", "ollama")
+    llm_api_key: str = _default_llm_api_key()
     llm_temperature: float = float(os.getenv("EVALRAG_LLM_TEMPERATURE", "0.2"))
     llm_max_tokens: int = int(os.getenv("EVALRAG_LLM_MAX_TOKENS", "1400"))
     llm_timeout_seconds: float = float(os.getenv("EVALRAG_LLM_TIMEOUT_SECONDS", "90"))

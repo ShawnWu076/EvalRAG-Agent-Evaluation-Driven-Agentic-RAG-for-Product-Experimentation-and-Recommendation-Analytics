@@ -87,6 +87,7 @@ logs/
   rag_logs.jsonl             created at runtime
 docs/
   LOCAL_LLM.md               Ollama / LM Studio setup
+  HOSTED_OPENAI_API.md       Hosted OpenAI API setup
 tests/
 ```
 
@@ -135,6 +136,30 @@ python3 scripts/query.py "Revenue increased but 7-day retention dropped. Should 
 ```
 
 For LM Studio, use `http://localhost:1234/v1` and the model id shown in the LM Studio Developer tab. See `docs/LOCAL_LLM.md` for details.
+
+## Optional Hosted OpenAI API Generation
+
+The same OpenAI-compatible generator can point to the hosted OpenAI API. Keep your key in an environment variable:
+
+```bash
+export OPENAI_API_KEY="your_api_key_here"
+
+EVALRAG_GENERATOR=openai_compatible \
+EVALRAG_LLM_BASE_URL=https://api.openai.com/v1 \
+EVALRAG_LLM_MODEL=gpt-5.4-mini \
+python3 scripts/query.py "Revenue increased but 7-day retention dropped. Should we launch?" --show-metadata
+```
+
+For API-based eval, start small to control cost:
+
+```bash
+EVALRAG_GENERATOR=openai_compatible \
+EVALRAG_LLM_BASE_URL=https://api.openai.com/v1 \
+EVALRAG_LLM_MODEL=gpt-5.4-mini \
+python3 scripts/run_eval.py --limit 5 --save-records logs/openai_eval_sample5.json
+```
+
+See `docs/HOSTED_OPENAI_API.md` for details.
 
 ## Example V1 Question
 
