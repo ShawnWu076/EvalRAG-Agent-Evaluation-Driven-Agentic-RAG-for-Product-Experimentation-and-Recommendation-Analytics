@@ -29,10 +29,15 @@ def main() -> None:
     }
     results = {}
     for name, alpha in configs.items():
-        results[name] = run_eval(args.eval_path, args.top_k, alpha, write_logs=False)["metrics"]
+        results[name] = run_eval(
+            args.eval_path,
+            args.top_k,
+            alpha,
+            write_logs=False,
+            generation_enabled=False,
+        )["metrics"]
     print(json.dumps(results, indent=2))
 
 
 if __name__ == "__main__":
     main()
-

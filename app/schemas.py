@@ -19,11 +19,15 @@ class AskResponse(BaseModel):
     query_id: str
     answer: str
     decision: str
+    llm_decision: str | None = None
+    policy_decision: str | None = None
+    final_decision: str | None = None
+    policy_validation: dict[str, Any] = Field(default_factory=dict)
     retrieved_chunks: list[dict[str, Any]]
     evaluation: dict[str, Any]
     latency_seconds: float
     model: str
-    generator_backend: str = "rule"
+    generator_backend: str = "openai_compatible"
     generator_error: str | None = None
 
 

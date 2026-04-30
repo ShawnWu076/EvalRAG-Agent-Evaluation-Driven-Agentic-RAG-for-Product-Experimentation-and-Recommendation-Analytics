@@ -27,7 +27,11 @@ def main() -> None:
     if args.show_metadata:
         print("\n## Generation Metadata")
         print(f"model: {record['model']}")
-        print(f"generator_backend: {record.get('generator_backend', 'rule')}")
+        print(f"generator_backend: {record.get('generator_backend', 'openai_compatible')}")
+        print(f"llm_decision: {record.get('llm_decision')}")
+        print(f"policy_decision: {record.get('policy_decision')}")
+        print(f"final_decision: {record.get('final_decision', record.get('decision'))}")
+        print(f"policy_action: {record.get('policy_validation', {}).get('policy_action')}")
         if record.get("generator_error"):
             print(f"generator_error: {record['generator_error']}")
 

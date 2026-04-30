@@ -4,8 +4,15 @@ services:
     ports:
       - "8000:8000"
     environment:
-      EVALRAG_MODEL: local-rule-generator
+      EVALRAG_GENERATOR: openai_compatible
+      EVALRAG_LLM_BASE_URL: https://api.openai.com/v1
+      EVALRAG_LLM_MODEL: gpt-5.4-mini
+      EVALRAG_LLM_TOKEN_PARAMETER: max_completion_tokens
+      EVALRAG_LLM_FALLBACK_ENABLED: "true"
+      EVALRAG_FALLBACK_LLM_BASE_URL: http://host.docker.internal:11434/v1
+      EVALRAG_FALLBACK_LLM_MODEL: qwen3:8b
+      EVALRAG_FALLBACK_LLM_TOKEN_PARAMETER: max_tokens
       EVALRAG_TOP_K: "5"
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     volumes:
       - ./logs:/app/logs
-
