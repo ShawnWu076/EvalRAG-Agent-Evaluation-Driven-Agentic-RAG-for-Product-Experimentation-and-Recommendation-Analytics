@@ -30,7 +30,7 @@ class Settings:
     model_name: str = os.getenv("EVALRAG_MODEL", "local-rule-generator")
     generator_backend: str = os.getenv("EVALRAG_GENERATOR", "rule").strip().lower()
     llm_base_url: str = os.getenv("EVALRAG_LLM_BASE_URL", "http://localhost:11434/v1")
-    llm_model: str = os.getenv("EVALRAG_LLM_MODEL", "qwen3:14b")
+    llm_model: str = os.getenv("EVALRAG_LLM_MODEL", "qwen3:8b")
     llm_api_key: str = os.getenv("EVALRAG_LLM_API_KEY", "ollama")
     llm_temperature: float = float(os.getenv("EVALRAG_LLM_TEMPERATURE", "0.2"))
     llm_max_tokens: int = int(os.getenv("EVALRAG_LLM_MAX_TOKENS", "1400"))

@@ -78,6 +78,8 @@ Rules:
 - If evidence is missing, say what is missing and how it affects the decision.
 - If SRM, logging, assignment, or validity checks fail, do not treat metric lift as causal launch evidence.
 - Cite retrieved source filenames in the Retrieved Sources section.
+- Do not include chain-of-thought. If the model supports non-thinking mode, use /no_think.
+- Do not repeat instruction text such as "Use exactly this label" in the final answer.
 - Return markdown only.
 """
     user = f"""User question:
@@ -97,7 +99,7 @@ Write the answer in exactly this structure:
 ## Short Answer
 
 ## Decision Recommendation
-Use exactly this label: `{decision}`
+`{decision}`
 
 ## Reasoning
 

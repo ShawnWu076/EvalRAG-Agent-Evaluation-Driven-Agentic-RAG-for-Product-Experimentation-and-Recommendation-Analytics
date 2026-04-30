@@ -129,7 +129,7 @@ By default, EvalRAG uses a deterministic `rule` generator so the project can run
 ```bash
 EVALRAG_GENERATOR=local_llm \
 EVALRAG_LLM_BASE_URL=http://localhost:11434/v1 \
-EVALRAG_LLM_MODEL=qwen3:14b \
+EVALRAG_LLM_MODEL=qwen3:8b \
 EVALRAG_LLM_API_KEY=ollama \
 python3 scripts/query.py "Revenue increased but 7-day retention dropped. Should we launch?" --show-metadata
 ```

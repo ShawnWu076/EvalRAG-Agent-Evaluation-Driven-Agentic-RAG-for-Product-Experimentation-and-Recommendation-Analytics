@@ -21,8 +21,8 @@ It is closer to "if this scenario pattern appears, choose this decision label an
 
 Good starting points for this project:
 
-- `Qwen3-14B` / `qwen3:14b`: strong instruction following, multilingual support, and reasoning/non-reasoning modes. Good first choice for launch memos.
-- `Qwen3-8B` / `qwen3:8b`: faster fallback if 14B is too slow.
+- `Qwen3-8B` / `qwen3:8b`: strong instruction following, multilingual support, and a good speed/quality balance on a 16GB M1 Pro. Recommended default for launch memos.
+- `Qwen3-14B` / `qwen3:14b`: stronger but heavier. Use it if you are willing to trade speed for quality.
 - `DeepSeek-R1-Distill-Qwen-14B` / `deepseek-r1:14b`: stronger explicit reasoning style, but may produce longer outputs and visible thinking unless configured carefully.
 
 For this project, prefer concise instruct behavior over long chain-of-thought. The prompt already asks the model to return final markdown only.
@@ -32,14 +32,14 @@ For this project, prefer concise instruct behavior over long chain-of-thought. T
 Start Ollama and pull a model:
 
 ```bash
-ollama pull qwen3:14b
+ollama pull qwen3:8b
 ```
 
 Run a query with the local LLM backend:
 
 ```bash
 cd ~/Documents/EvalRAG-Agent
-EVALRAG_GENERATOR=local_llm EVALRAG_LLM_BASE_URL=http://localhost:11434/v1 EVALRAG_LLM_MODEL=qwen3:14b EVALRAG_LLM_API_KEY=ollama python3 scripts/query.py "Revenue increased by 5%, but 7-day retention dropped by 2%. Should we launch?" --show-metadata
+EVALRAG_GENERATOR=local_llm EVALRAG_LLM_BASE_URL=http://localhost:11434/v1 EVALRAG_LLM_MODEL=qwen3:8b EVALRAG_LLM_API_KEY=ollama python3 scripts/query.py "Revenue increased by 5%, but 7-day retention dropped by 2%. Should we launch?" --show-metadata
 ```
 
 If Ollama is not running or the model is unavailable, EvalRAG falls back to the deterministic rule generator by default and records `generator_backend=rule_fallback` plus `generator_error` in the response/log.
@@ -58,7 +58,7 @@ EVALRAG_LLM_TIMEOUT_SECONDS=180 \
 .venv/bin/python scripts/query.py "Revenue increased by 5%, but 7-day retention dropped by 2%. Should we launch?" --show-metadata
 ```
 
-DeepSeek-R1-style reasoning models can be slow for this memo-writing task because they may spend many tokens reasoning before the final answer. For a faster demo, try Qwen3-14B or Qwen3-8B if available.
+DeepSeek-R1-style reasoning models can be slow for this memo-writing task because they may spend many tokens reasoning before the final answer. For a faster demo, try Qwen3-8B for faster memo generation.
 
 ## Option B: LM Studio
 
@@ -80,7 +80,7 @@ EVALRAG_GENERATOR=local_llm EVALRAG_LLM_BASE_URL=http://localhost:1234/v1 EVALRA
 Start the API with local LLM generation enabled:
 
 ```bash
-EVALRAG_GENERATOR=local_llm EVALRAG_LLM_BASE_URL=http://localhost:11434/v1 EVALRAG_LLM_MODEL=qwen3:14b uvicorn app.main:app --reload
+EVALRAG_GENERATOR=local_llm EVALRAG_LLM_BASE_URL=http://localhost:11434/v1 EVALRAG_LLM_MODEL=qwen3:8b uvicorn app.main:app --reload
 ```
 
 Then open:
