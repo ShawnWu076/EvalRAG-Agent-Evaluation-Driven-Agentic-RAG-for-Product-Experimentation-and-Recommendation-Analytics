@@ -23,6 +23,8 @@ class AskResponse(BaseModel):
     evaluation: dict[str, Any]
     latency_seconds: float
     model: str
+    generator_backend: str = "rule"
+    generator_error: str | None = None
 
 
 class AnalyzeResponse(AskResponse):

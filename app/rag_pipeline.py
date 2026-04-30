@@ -10,6 +10,7 @@ from typing import Any
 
 from app.chunking import build_chunks, load_chunks
 from app.config import PLAYBOOK_DIR, settings
+from app.llm_generator import LLMGenerationConfig, LLMGenerationError, generate_llm_answer
 from app.retrieval import (
     SimpleHybridRetriever,
     results_to_dicts,
@@ -306,7 +307,31 @@ class EvalRAGPipeline:
         retrieved_results = self.retriever.search(question, top_k=self.top_k, alpha=self.alpha)
         retrieved = results_to_dicts(retrieved_results)
         decision = infer_decision(question, tool_summary)
-        answer = generate_structured_answer(question, retrieved, decision, tool_summary)
+        generator_backend = settings.generator_backend
+        generator_error = None
+        model_name = settings.model_name
+        if generator_backend in {"local_llm", "llm", "openai_compatible"}:
+            llm_config = LLMGenerationConfig(
+                base_url=settings.llm_base_url,
+                model=settings.llm_model,
+                api_key=settings.llm_api_key,
+                temperature=settings.llm_temperature,
+                max_tokens=settings.llm_max_tokens,
+                timeout_seconds=settings.llm_timeout_seconds,
+                token_parameter=settings.llm_token_parameter,
+            )
+            try:
+                answer = generate_llm_answer(question, retrieved, decision, llm_config, tool_summary)
+                model_name = settings.llm_model
+            except LLMGenerationError as exc:
+                if not settings.llm_fallback_enabled:
+                    raise
+                generator_error = str(exc)
+                answer = generate_structured_answer(question, retrieved, decision, tool_summary)
+                model_name = settings.model_name
+                generator_backend = "rule_fallback"
+        else:
+            answer = generate_structured_answer(question, retrieved, decision, tool_summary)
         latency = round(time.perf_counter() - started, 4)
         retrieved_sources = [item["source"] for item in retrieved]
         evaluation = evaluate_trace(
@@ -335,8 +360,11 @@ class EvalRAGPipeline:
             "expected_decision": expected_decision,
             "evaluation": evaluation,
             "latency_seconds": latency,
-            "model": settings.model_name,
+            "model": model_name,
+            "generator_backend": generator_backend,
         }
+        if generator_error:
+            record["generator_error"] = generator_error
         if tool_summary:
             record["tool_summary"] = tool_summary
         if log:
@@ -353,4 +381,6 @@ def record_to_public_response(record: dict[str, Any]) -> dict[str, Any]:
         "evaluation": record["evaluation"],
         "latency_seconds": record["latency_seconds"],
         "model": record["model"],
+        "generator_backend": record.get("generator_backend", "rule"),
+        "generator_error": record.get("generator_error"),
     }

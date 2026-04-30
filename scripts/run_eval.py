@@ -36,8 +36,17 @@ def reciprocal_rank(retrieved: list[dict[str, Any]], expected_sources: list[str]
     return 0.0
 
 
-def run_eval(path: Path, top_k: int, alpha: float, write_logs: bool) -> dict[str, Any]:
+def run_eval(
+    path: Path,
+    top_k: int,
+    alpha: float,
+    write_logs: bool,
+    limit: int | None = None,
+    save_records: Path | None = None,
+) -> dict[str, Any]:
     questions = load_jsonl(path)
+    if limit is not None:
+        questions = questions[:limit]
     pipeline = EvalRAGPipeline(top_k=top_k, alpha=alpha)
     records: list[dict[str, Any]] = []
     for item in questions:
@@ -86,6 +95,10 @@ def run_eval(path: Path, top_k: int, alpha: float, write_logs: bool) -> dict[str
         if not record["evaluation"]["source_hit"] or record["evaluation"]["decision_correct"] is False
     ]
 
+    if save_records is not None:
+        save_records.parent.mkdir(parents=True, exist_ok=True)
+        save_records.write_text(json.dumps(records, indent=2), encoding="utf-8")
+
     return {
         "question_count": len(records),
         "top_k": top_k,
@@ -108,9 +121,18 @@ def main() -> None:
     parser.add_argument("--top-k", type=int, default=5)
     parser.add_argument("--alpha", type=float, default=0.65, help="Hybrid score weight for vector score.")
     parser.add_argument("--write-logs", action="store_true")
+    parser.add_argument("--limit", type=int, default=None, help="Evaluate only the first N questions.")
+    parser.add_argument("--save-records", type=Path, default=None, help="Write per-question eval records to a JSON file.")
     args = parser.parse_args()
 
-    result = run_eval(args.eval_path, args.top_k, args.alpha, args.write_logs)
+    result = run_eval(
+        args.eval_path,
+        args.top_k,
+        args.alpha,
+        args.write_logs,
+        limit=args.limit,
+        save_records=args.save_records,
+    )
     print(json.dumps(result, indent=2))
 
 

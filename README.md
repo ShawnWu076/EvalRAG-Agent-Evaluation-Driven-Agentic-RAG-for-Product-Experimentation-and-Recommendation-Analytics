@@ -85,6 +85,9 @@ scripts/
   generate_synthetic_data.py
 logs/
   rag_logs.jsonl             created at runtime
+docs/
+  LOCAL_LLM.md               Ollama / LM Studio setup
+  HOSTED_OPENAI_API.md       Hosted OpenAI API setup
 tests/
 ```
 
@@ -94,7 +97,7 @@ The core build/eval/stat scripts are dependency-light and run with the Python st
 
 ```bash
 python3 scripts/build_index.py
-python3 scripts/query.py "Revenue increased but 7-day retention dropped. Should we launch?"
+python3 scripts/query.py "Revenue increased but 7-day retention dropped. Should we launch?" --show-metadata
 python3 scripts/analyze_csv.py data/synthetic/guardrail_failure.csv --show-tools
 python3 scripts/run_eval.py
 python3 scripts/compare_retrievers.py
@@ -119,6 +122,46 @@ curl -X POST http://127.0.0.1:8000/ask \
   -H "Content-Type: application/json" \
   -d '{"question":"Revenue increased but 7-day retention dropped. Should we launch?"}'
 ```
+
+## Optional Local LLM Generation
+
+By default, EvalRAG uses a deterministic `rule` generator so the project can run without an LLM server. You can switch generation to a local OpenAI-compatible endpoint such as Ollama or LM Studio:
+
+```bash
+EVALRAG_GENERATOR=local_llm \
+EVALRAG_LLM_BASE_URL=http://localhost:11434/v1 \
+EVALRAG_LLM_MODEL=qwen3:8b \
+EVALRAG_LLM_API_KEY=ollama \
+python3 scripts/query.py "Revenue increased but 7-day retention dropped. Should we launch?" --show-metadata
+```
+
+For LM Studio, use `http://localhost:1234/v1` and the model id shown in the LM Studio Developer tab. See `docs/LOCAL_LLM.md` for details.
+
+## Optional Hosted OpenAI API Generation
+
+The same OpenAI-compatible generator can point to the hosted OpenAI API. Keep your key in an environment variable:
+
+```bash
+export OPENAI_API_KEY="your_api_key_here"
+
+EVALRAG_GENERATOR=openai_compatible \
+EVALRAG_LLM_BASE_URL=https://api.openai.com/v1 \
+EVALRAG_LLM_MODEL=gpt-5.4-mini \
+EVALRAG_LLM_TOKEN_PARAMETER=max_completion_tokens \
+python3 scripts/query.py "Revenue increased but 7-day retention dropped. Should we launch?" --show-metadata
+```
+
+For API-based eval, start small to control cost:
+
+```bash
+EVALRAG_GENERATOR=openai_compatible \
+EVALRAG_LLM_BASE_URL=https://api.openai.com/v1 \
+EVALRAG_LLM_MODEL=gpt-5.4-mini \
+EVALRAG_LLM_TOKEN_PARAMETER=max_completion_tokens \
+python3 scripts/run_eval.py --limit 5 --save-records logs/openai_eval_sample5.json
+```
+
+See `docs/HOSTED_OPENAI_API.md` for details.
 
 ## Example V1 Question
 

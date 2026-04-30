@@ -18,11 +18,18 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("question")
     parser.add_argument("--top-k", type=int, default=5)
+    parser.add_argument("--show-metadata", action="store_true")
     args = parser.parse_args()
 
     pipeline = EvalRAGPipeline(top_k=args.top_k)
     record = pipeline.answer(args.question)
     print(record["answer"])
+    if args.show_metadata:
+        print("\n## Generation Metadata")
+        print(f"model: {record['model']}")
+        print(f"generator_backend: {record.get('generator_backend', 'rule')}")
+        if record.get("generator_error"):
+            print(f"generator_error: {record['generator_error']}")
 
 
 if __name__ == "__main__":
