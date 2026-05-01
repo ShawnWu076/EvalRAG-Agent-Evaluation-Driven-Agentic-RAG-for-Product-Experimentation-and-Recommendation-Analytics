@@ -58,7 +58,7 @@ class Settings:
     top_k: int = int(os.getenv("EVALRAG_TOP_K", "5"))
     chunk_size: int = int(os.getenv("EVALRAG_CHUNK_SIZE", "420"))
     chunk_overlap: int = int(os.getenv("EVALRAG_CHUNK_OVERLAP", "80"))
-    chunk_semantic_enable: bool = _env_bool("EVALRAG_CHUNK_SEMANTIC_ENABLE", True)
+    chunk_semantic_enable: bool = _env_bool("EVALRAG_CHUNK_SEMANTIC_ENABLE", False)
     chunk_semantic_model: str = os.getenv("EVALRAG_CHUNK_SEMANTIC_MODEL", "BAAI/bge-small-en-v1.5")
     chunk_semantic_device: str = os.getenv("EVALRAG_CHUNK_SEMANTIC_DEVICE", "cpu")
     chunk_semantic_offline: bool = _env_bool("EVALRAG_CHUNK_SEMANTIC_OFFLINE", True)

@@ -47,42 +47,49 @@ This is still a prototype, not a production launch-decision system. The goal is 
 
 - RAG over a product experimentation playbook instead of a generic PDF chatbot.
 - Hybrid retrieval using BM25 plus hashed-vector scoring.
+- A bounded LangGraph experimentation analyst workflow instead of a single linear pipeline.
+- Structured evidence-first decision flow with explicit `task_type`, `required_tools`, `tool_summary`, `evidence_bundle`, and `decision_json`.
 - LLM-generated launch memos with explicit, parseable decision labels.
 - Hybrid decision tracing with `llm_decision`, `policy_decision`, and `final_decision`.
 - Hosted OpenAI-compatible generation by default, with local Ollama `qwen3:8b` fallback.
 - Telemetry for query, retrieved chunks, scores, latency, answer, model, and backend.
-- Evaluation harness for retrieval quality, concept coverage, decision accuracy, and latency.
+- Evaluation harness for retrieval quality, concept coverage, decision accuracy, latency, and graph-level workflow checks.
 - Retrieval-only eval mode for debugging search quality without LLM cost.
 - CSV analysis tools for SRM checks, metric lifts, approximate tests, and segment analysis.
 
 ## Architecture
 
 ```text
-User question / CSV
-        |
-        v
-Hybrid Retriever over playbook chunks
-        |
-        v
-Statistical tools, when CSV is provided
-        |
-        v
-OpenAI-compatible LLM generator
-        |
-        v
-LLM memo + llm_decision
-        |
-        v
-Policy validator
-        |
-        v
-Final launch memo + final_decision
-        |
-        v
-Telemetry log + evaluation metrics
+START
+  -> intake_node
+  -> classify_task_node
+  -> tool_planner_node
+  -> tool_executor_node
+  -> retrieval_node
+  -> evidence_bundle_node
+  -> evidence_checker_node
+  -> if evidence is insufficient and retry_count < max_retries:
+       replan_node -> tool_executor_node / retrieval_node
+     else:
+       decision_node
+  -> policy_validator_node
+  -> if validator finds conflict and retry_count < max_retries:
+       revise_decision_node -> policy_validator_node
+     else:
+       memo_generator_node
+  -> eval_node
+  -> END
 ```
 
-The LLM is responsible for synthesizing the answer and choosing one decision label from the allowed decision set. The code then parses that label, validates it against hard product-experiment policies, and evaluates both the LLM proposal and final decision against the scenario dataset.
+The workflow is intentionally bounded and inspectable. It is not an open-ended chatbot agent. The graph first classifies the task, plans multiple tools when needed, executes those tools, retrieves relevant playbook rules, builds an evidence bundle, decides on a structured recommendation, validates it against hard experimentation policies, generates a human-readable memo, and evaluates the full trace.
+
+This means the system can support mixed workflows such as:
+
+- question only -> retrieve playbook -> make a structured launch decision
+- CSV + question -> validate data + run SRM/lift/tests/segments + retrieve playbook -> combine evidence -> decide
+- non-random rollout -> avoid simple A/B causal claims and route toward quasi-experiment reasoning
+
+At v0.1, task classification and tool planning are rule-based. The LLM is used for memo generation, while the graph keeps decision-making explicit through `decision_json` and policy validation.
 
 Allowed decision labels:
 
@@ -98,7 +105,11 @@ Allowed decision labels:
 ```text
 app/
   main.py                    FastAPI app
-  rag_pipeline.py            RAG orchestration, LLM generation, policy validation, eval helpers
+  rag_pipeline.py            Backward-compatible pipeline interface over the graph workflow
+  graph/
+    state.py                 Shared graph state schema
+    nodes.py                 Graph node implementations
+    workflow.py              LangGraph workflow definition and routing
   policy_validator.py        Hard-constraint policy checks for hybrid decisions
   llm_generator.py           OpenAI-compatible chat-completions client and prompt builder
   retrieval.py               BM25 + hashed-vector hybrid retriever
@@ -157,6 +168,8 @@ Analyze a synthetic CSV:
 ```bash
 python scripts/analyze_csv.py data/synthetic/guardrail_failure.csv --show-tools
 ```
+
+The CLI now passes raw CSV text into the graph workflow. Tool selection and execution happen inside the bounded analyst graph rather than as a separate pre-step.
 
 Run the FastAPI app:
 
@@ -285,13 +298,25 @@ Optional section when a hard policy confirms or overrides the LLM proposal.
 ## Retrieved Sources
 ```
 
+The internal workflow also records structured intermediate objects such as:
+
+- `task_type`
+- `required_tools`
+- `tool_summary`
+- `evidence_bundle`
+- `evidence_sufficiency`
+- `decision_json`
+- `policy_validation`
+
 ## Current Limitations
 
 - The playbook is still being expanded and refined.
+- The LangGraph workflow is intentionally bounded and rule-heavy in v0.1; task classification, replanning, and evidence sufficiency checks are still deterministic baselines.
 - Concept coverage uses deterministic exact, stemmed token-overlap, and fuzzy phrase-window matching by default; optional `--concept-judge` adds a strict LLM judge only for unresolved gaps.
 - The policy validator is conservative and deterministic; it now records structured policy IDs, priorities, and blocking/supportive findings, but future work should externalize these rules into a configurable policy layer.
 - The statistical tools are lightweight approximations intended for synthetic demo data, not production experimentation infrastructure.
 - Retrieval uses a dependency-light hashed-vector method, not a production embedding database or reranker.
+- Semantic chunking support exists, but local offline environments may still rely on simpler fallback chunking depending on model availability.
 
 ## Recommended Next Steps
 
@@ -304,4 +329,4 @@ Optional section when a hard policy confirms or overrides the LLM proposal.
 
 ## Project Identity
 
-This project is not a simple chatbot over markdown files. It is an evaluation-driven RAG prototype for product experimentation analytics, designed to make AI-assisted launch recommendations grounded, inspectable, measurable, and iteratively improvable.
+This project is not a simple chatbot over markdown files. It is a bounded, evaluation-driven experimentation analyst workflow for product analytics, designed to make AI-assisted launch recommendations grounded, inspectable, measurable, and iteratively improvable.
