@@ -375,7 +375,7 @@ def main() -> None:
     parser.add_argument("--limit", type=int, default=None, help="Evaluate only the first N saved records.")
     parser.add_argument("--failure-threshold", type=float, default=0.7, help="Scores below this are surfaced in failure_analysis.")
     parser.add_argument("--max-context-chars", type=int, default=1600, help="Max characters kept per retrieved context.")
-    parser.add_argument("--ragas-model", default=os.getenv("EVALRAG_RAGAS_MODEL", "gpt-4.1-mini"), help="OpenAI model used by Ragas judge metrics.")
+    parser.add_argument("--ragas-model", default=os.getenv("EVALRAG_RAGAS_MODEL", "gpt-5.4-mini"), help="OpenAI model used by Ragas judge metrics.")
     parser.add_argument("--ragas-embedding-model", default=os.getenv("EVALRAG_RAGAS_EMBEDDING_MODEL", "text-embedding-3-small"), help="OpenAI embedding model used by Ragas metrics.")
     parser.add_argument("--ragas-max-tokens", type=int, default=int(os.getenv("EVALRAG_RAGAS_MAX_TOKENS", "4096")), help="Max output tokens for Ragas judge calls.")
     parser.add_argument("--ragas-temperature", type=float, default=float(os.getenv("EVALRAG_RAGAS_TEMPERATURE", "0.0")), help="Temperature for Ragas judge calls.")
