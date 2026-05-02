@@ -247,10 +247,10 @@ Run stricter concept coverage with an LLM judge fallback. The judge is only call
 python scripts/run_eval.py --concept-judge --save-records logs/openai_eval_judge_full.json
 ```
 
-Run Ragas evaluation over saved records. This computes faithfulness, answer relevancy, and context precision. It may call judge LLMs through Ragas:
+Run Ragas evaluation over saved records. This computes faithfulness, answer relevancy, context precision, context recall, and answer correctness. It may call judge LLMs and embeddings through Ragas:
 
 ```bash
-python scripts/run_ragas_eval.py --records logs/openai_eval_full.json --output logs/ragas_eval_full.json
+python scripts/run_ragas_eval.py --records logs/openai_eval_full.json --output logs/ragas_eval_full.json --csv-output logs/ragas_eval_full.csv
 ```
 
 Prepare the Ragas input dataset without spending judge tokens:
@@ -290,6 +290,8 @@ Ragas metrics include:
 - `faithfulness`: whether the answer is grounded in retrieved contexts
 - `answer_relevancy`: whether the answer directly addresses the user question
 - `context_precision`: whether retrieved contexts are useful and ranked well
+- `context_recall`: whether retrieved contexts cover the reference answer
+- `answer_correctness`: whether the answer matches the ground-truth/reference answer
 
 ## Example Output Shape
 

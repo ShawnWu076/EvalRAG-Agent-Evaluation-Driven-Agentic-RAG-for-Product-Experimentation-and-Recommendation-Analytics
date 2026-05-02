@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import statistics
 import sys
 from pathlib import Path
@@ -27,7 +28,9 @@ DEFAULT_CSV_OUTPUT_PATH = ROOT / "logs" / "ragas_eval_report.csv"
 CANONICAL_METRICS = {
     "faithfulness": ["faithfulness"],
     "answer_relevancy": ["answer_relevancy", "response_relevancy"],
-    "context_precision": ["context_precision", "llm_context_precision_with_reference"],
+    "context_precision": ["context_precision", "context_precision_with_reference", "llm_context_precision_with_reference"],
+    "context_recall": ["context_recall", "llm_context_recall"],
+    "answer_correctness": ["answer_correctness"],
 }
 
 
@@ -127,10 +130,12 @@ def classify_ragas_failures(
         }
         if not weak_metrics:
             continue
-        if "context_precision" in weak_metrics:
+        if "context_precision" in weak_metrics or "context_recall" in weak_metrics:
             hypothesis = "retrieval_fail"
         elif "faithfulness" in weak_metrics:
             hypothesis = "hallucination_or_grounding_fail"
+        elif "answer_correctness" in weak_metrics:
+            hypothesis = "answer_correctness_or_reference_gap"
         else:
             hypothesis = "answer_relevance_or_reasoning_fail"
         failures.append(
@@ -155,15 +160,55 @@ def _dataframe_records(dataframe: Any, rows: list[dict[str, Any]]) -> list[dict[
     return records
 
 
-def _run_modern_ragas(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], Any]:
+def _openai_api_key() -> str:
+    return os.getenv("EVALRAG_RAGAS_API_KEY") or os.getenv("OPENAI_API_KEY") or ""
+
+
+def _build_modern_ragas_metrics(
+    model: str,
+    embedding_model: str,
+    max_tokens: int,
+    temperature: float,
+) -> list[Any]:
+    from openai import OpenAI
+    from ragas.embeddings import OpenAIEmbeddings
+    from ragas.llms import llm_factory
+    from ragas.metrics.collections import (
+        AnswerCorrectness,
+        AnswerRelevancy,
+        ContextPrecisionWithReference,
+        ContextRecall,
+        Faithfulness,
+    )
+
+    api_key = _openai_api_key()
+    if not api_key:
+        raise RuntimeError("Set OPENAI_API_KEY or EVALRAG_RAGAS_API_KEY before running Ragas evaluation.")
+    client = OpenAI(api_key=api_key)
+    llm = llm_factory(model, client=client, max_tokens=max_tokens, temperature=temperature)
+    embeddings = OpenAIEmbeddings(client=client, model=embedding_model)
+    return [
+        Faithfulness(llm=llm),
+        AnswerRelevancy(llm=llm, embeddings=embeddings),
+        ContextPrecisionWithReference(llm=llm),
+        ContextRecall(llm=llm),
+        AnswerCorrectness(llm=llm, embeddings=embeddings),
+    ]
+
+
+def _run_modern_ragas(
+    rows: list[dict[str, Any]],
+    model: str,
+    embedding_model: str,
+    max_tokens: int,
+    temperature: float,
+) -> tuple[list[dict[str, Any]], Any]:
     from ragas import EvaluationDataset, evaluate
 
     try:
         from ragas import SingleTurnSample
     except ImportError:  # pragma: no cover - version compatibility
         from ragas.dataset_schema import SingleTurnSample
-
-    from ragas.metrics import Faithfulness, LLMContextPrecisionWithReference, ResponseRelevancy
 
     samples = [
         SingleTurnSample(
@@ -177,7 +222,13 @@ def _run_modern_ragas(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]],
     dataset = EvaluationDataset(samples=samples)
     result = evaluate(
         dataset,
-        metrics=[Faithfulness(), ResponseRelevancy(), LLMContextPrecisionWithReference()],
+        metrics=_build_modern_ragas_metrics(
+            model=model,
+            embedding_model=embedding_model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+        ),
+        raise_exceptions=False,
     )
     dataframe = result.to_pandas()
     return _dataframe_records(dataframe, rows), dataframe
@@ -186,7 +237,7 @@ def _run_modern_ragas(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]],
 def _run_legacy_ragas(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], Any]:
     from datasets import Dataset
     from ragas import evaluate
-    from ragas.metrics import answer_relevancy, context_precision, faithfulness
+    from ragas.metrics import answer_correctness, answer_relevancy, context_precision, context_recall, faithfulness
 
     dataset = Dataset.from_list(
         [
@@ -201,15 +252,28 @@ def _run_legacy_ragas(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]],
     )
     result = evaluate(
         dataset,
-        metrics=[faithfulness, answer_relevancy, context_precision],
+        metrics=[faithfulness, answer_relevancy, context_precision, context_recall, answer_correctness],
+        raise_exceptions=False,
     )
     dataframe = result.to_pandas()
     return _dataframe_records(dataframe, rows), dataframe
 
 
-def run_ragas(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], Any]:
+def run_ragas(
+    rows: list[dict[str, Any]],
+    model: str,
+    embedding_model: str,
+    max_tokens: int,
+    temperature: float,
+) -> tuple[list[dict[str, Any]], Any]:
     try:
-        return _run_modern_ragas(rows)
+        return _run_modern_ragas(
+            rows,
+            model=model,
+            embedding_model=embedding_model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
     except ImportError:
         return _run_legacy_ragas(rows)
 
@@ -240,6 +304,10 @@ def main() -> None:
     parser.add_argument("--limit", type=int, default=None, help="Evaluate only the first N saved records.")
     parser.add_argument("--failure-threshold", type=float, default=0.7, help="Scores below this are surfaced in failure_analysis.")
     parser.add_argument("--max-context-chars", type=int, default=2200, help="Max characters kept per retrieved context.")
+    parser.add_argument("--ragas-model", default=os.getenv("EVALRAG_RAGAS_MODEL", "gpt-4o-mini"), help="OpenAI model used by Ragas judge metrics.")
+    parser.add_argument("--ragas-embedding-model", default=os.getenv("EVALRAG_RAGAS_EMBEDDING_MODEL", "text-embedding-3-small"), help="OpenAI embedding model used by Ragas metrics.")
+    parser.add_argument("--ragas-max-tokens", type=int, default=int(os.getenv("EVALRAG_RAGAS_MAX_TOKENS", "4096")), help="Max output tokens for Ragas judge calls.")
+    parser.add_argument("--ragas-temperature", type=float, default=float(os.getenv("EVALRAG_RAGAS_TEMPERATURE", "0.0")), help="Temperature for Ragas judge calls.")
     parser.add_argument("--prepare-only", action="store_true", help="Prepare the Ragas dataset JSON without calling Ragas or an LLM judge.")
     args = parser.parse_args()
 
@@ -257,12 +325,20 @@ def main() -> None:
         return
 
     try:
-        metric_rows, dataframe = run_ragas(rows)
+        metric_rows, dataframe = run_ragas(
+            rows,
+            model=args.ragas_model,
+            embedding_model=args.ragas_embedding_model,
+            max_tokens=args.ragas_max_tokens,
+            temperature=args.ragas_temperature,
+        )
     except ImportError as exc:
         raise SystemExit(
             "Ragas is not installed. Install dependencies with `pip install -r requirements.txt`, "
             "then rerun this command."
         ) from exc
+    except RuntimeError as exc:
+        raise SystemExit(str(exc)) from exc
 
     args.csv_output.parent.mkdir(parents=True, exist_ok=True)
     dataframe.to_csv(args.csv_output, index=False)

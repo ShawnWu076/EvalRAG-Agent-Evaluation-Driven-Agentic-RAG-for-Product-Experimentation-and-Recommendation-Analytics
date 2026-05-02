@@ -29,14 +29,28 @@ class RagasEvalTests(unittest.TestCase):
     def test_summarize_metric_rows_handles_modern_and_legacy_metric_names(self) -> None:
         summary = summarize_metric_rows(
             [
-                {"faithfulness": 0.8, "answer_relevancy": 0.6, "context_precision": 0.7},
-                {"faithfulness": 1.0, "response_relevancy": 0.8, "llm_context_precision_with_reference": 0.9},
+                {
+                    "faithfulness": 0.8,
+                    "answer_relevancy": 0.6,
+                    "context_precision": 0.7,
+                    "context_recall": 0.5,
+                    "answer_correctness": 0.4,
+                },
+                {
+                    "faithfulness": 1.0,
+                    "response_relevancy": 0.8,
+                    "llm_context_precision_with_reference": 0.9,
+                    "llm_context_recall": 0.7,
+                    "answer_correctness": 0.8,
+                },
             ]
         )
 
         self.assertEqual(summary["faithfulness"], 0.9)
         self.assertEqual(summary["answer_relevancy"], 0.7)
         self.assertEqual(summary["context_precision"], 0.8)
+        self.assertEqual(summary["context_recall"], 0.6)
+        self.assertEqual(summary["answer_correctness"], 0.6)
 
     def test_classify_ragas_failures_prefers_retrieval_failure_when_context_is_weak(self) -> None:
         failures = classify_ragas_failures(
@@ -47,6 +61,8 @@ class RagasEvalTests(unittest.TestCase):
                     "faithfulness": 0.95,
                     "answer_relevancy": 0.9,
                     "context_precision": 0.2,
+                    "context_recall": 0.8,
+                    "answer_correctness": 0.9,
                 }
             ],
             threshold=0.7,

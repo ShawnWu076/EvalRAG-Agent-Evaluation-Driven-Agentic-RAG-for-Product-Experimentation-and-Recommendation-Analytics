@@ -23,7 +23,9 @@ This is not Ragas. It is custom evaluation for product experimentation launch de
 
 - faithfulness: whether the answer is grounded in retrieved context;
 - answer relevancy: whether the answer directly addresses the question;
-- context precision: whether retrieved contexts are useful and ranked well.
+- context precision: whether retrieved contexts are useful and ranked well;
+- context recall: whether retrieved contexts cover the reference answer;
+- answer correctness: whether the answer matches the ground-truth/reference answer.
 
 Typical workflow:
 
@@ -38,11 +40,12 @@ To inspect the prepared Ragas dataset without spending judge tokens:
 python scripts/run_ragas_eval.py --records logs/openai_eval_full.json --prepare-only --output logs/ragas_input_full.json
 ```
 
-The Ragas report includes a lightweight failure analysis:
+The Ragas report includes a lightweight failure analysis. This is EvalRAG logic built on top of Ragas scores, not a separate built-in Ragas feature:
 
-- low context precision -> retrieval failure hypothesis;
+- low context precision or context recall -> retrieval failure hypothesis;
 - low faithfulness -> hallucination or grounding failure hypothesis;
-- low answer relevancy -> answer relevance or reasoning failure hypothesis.
+- low answer relevancy -> answer relevance or reasoning failure hypothesis;
+- low answer correctness -> answer correctness issue or weak reference/ground-truth issue.
 
 ## Golden Dataset Direction
 
