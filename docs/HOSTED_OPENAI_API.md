@@ -44,25 +44,9 @@ EVALRAG_LLM_TOKEN_PARAMETER=max_completion_tokens \
 python scripts/analyze_csv.py data/synthetic/guardrail_failure.csv --show-tools
 ```
 
-## 4. Run a Small Eval First
+## 4. Run the 25-Question Eval
 
-API eval costs money because each eval question calls the model. Start with a small limit:
-
-```bash
-EVALRAG_GENERATOR=openai_compatible \
-EVALRAG_LLM_BASE_URL=https://api.openai.com/v1 \
-EVALRAG_LLM_MODEL=gpt-5.4-mini \
-EVALRAG_LLM_TOKEN_PARAMETER=max_completion_tokens \
-python scripts/run_eval.py --limit 5 --save-records logs/openai_eval_sample5.json
-```
-
-Then inspect:
-
-```bash
-cat logs/openai_eval_sample5.json
-```
-
-Run the full 25-question eval only after the sample looks good:
+API eval costs money because each eval question calls the model. The current eval set has 25 questions, so the default command runs the full set:
 
 ```bash
 EVALRAG_GENERATOR=openai_compatible \
@@ -72,6 +56,12 @@ EVALRAG_LLM_TOKEN_PARAMETER=max_completion_tokens \
 python scripts/run_eval.py --save-records logs/openai_eval_full.json
 ```
 
+Inspect the saved records:
+
+```bash
+cat logs/openai_eval_full.json
+```
+
 Optional strict concept judging adds extra LLM calls only for unresolved concept gaps:
 
 ```bash
@@ -79,7 +69,7 @@ EVALRAG_GENERATOR=openai_compatible \
 EVALRAG_LLM_BASE_URL=https://api.openai.com/v1 \
 EVALRAG_LLM_MODEL=gpt-5.4-mini \
 EVALRAG_LLM_TOKEN_PARAMETER=max_completion_tokens \
-python scripts/run_eval.py --concept-judge --limit 5 --save-records logs/openai_eval_judge_sample5.json
+python scripts/run_eval.py --concept-judge --save-records logs/openai_eval_judge_full.json
 ```
 
 You can use a separate judge model with `EVALRAG_CONCEPT_JUDGE_MODEL`; otherwise it uses the main LLM model.

@@ -88,10 +88,10 @@ That is the heart of evaluation-driven RAG.
 
 ## Running Evaluation
 
-Run a small LLM eval and save records:
+Run the full 25-question LLM eval and save records:
 
 ```bash
-python scripts/run_eval.py --limit 5 --save-records logs/openai_eval_sample5.json
+python scripts/run_eval.py --save-records logs/openai_eval_full.json
 ```
 
 Inspect decision layers:
@@ -99,7 +99,7 @@ Inspect decision layers:
 ```bash
 python - <<'PY'
 import json
-records = json.load(open("logs/openai_eval_sample5.json"))
+records = json.load(open("logs/openai_eval_full.json"))
 for r in records:
     print(
         r["eval_id"],
@@ -121,7 +121,7 @@ python scripts/run_eval.py --retrieval-only
 Run strict concept judging only for unresolved concept gaps:
 
 ```bash
-python scripts/run_eval.py --concept-judge --limit 5 --save-records logs/openai_eval_judge_sample5.json
+python scripts/run_eval.py --concept-judge --save-records logs/openai_eval_judge_full.json
 ```
 
 ## Metrics Added

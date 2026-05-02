@@ -28,14 +28,14 @@ This is not Ragas. It is custom evaluation for product experimentation launch de
 Typical workflow:
 
 ```bash
-python scripts/run_eval.py --limit 5 --save-records logs/openai_eval_sample5.json
-python scripts/run_ragas_eval.py --records logs/openai_eval_sample5.json --limit 5 --output logs/ragas_eval_sample5.json
+python scripts/run_eval.py --save-records logs/openai_eval_full.json
+python scripts/run_ragas_eval.py --records logs/openai_eval_full.json --output logs/ragas_eval_full.json
 ```
 
 To inspect the prepared Ragas dataset without spending judge tokens:
 
 ```bash
-python scripts/run_ragas_eval.py --records logs/openai_eval_sample5.json --prepare-only --output logs/ragas_input_sample5.json
+python scripts/run_ragas_eval.py --records logs/openai_eval_full.json --prepare-only --output logs/ragas_input_full.json
 ```
 
 The Ragas report includes a lightweight failure analysis:

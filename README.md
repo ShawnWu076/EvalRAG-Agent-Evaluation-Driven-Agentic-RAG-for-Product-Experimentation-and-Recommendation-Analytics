@@ -229,16 +229,10 @@ Each scenario can specify:
 - `expected_concepts`: concepts that should appear in the answer
 - `expected_decision`: expected launch recommendation label
 
-Run full LLM evaluation:
+Run full 25-question LLM evaluation:
 
 ```bash
 python scripts/run_eval.py --save-records logs/openai_eval_full.json
-```
-
-Run a small paid sample first:
-
-```bash
-python scripts/run_eval.py --limit 5 --save-records logs/openai_eval_sample5.json
 ```
 
 Run retrieval-only evaluation without calling an LLM:
@@ -250,19 +244,19 @@ python scripts/run_eval.py --retrieval-only
 Run stricter concept coverage with an LLM judge fallback. The judge is only called for still-missing concepts when deterministic coverage is below the failure threshold:
 
 ```bash
-python scripts/run_eval.py --concept-judge --limit 5 --save-records logs/openai_eval_judge_sample5.json
+python scripts/run_eval.py --concept-judge --save-records logs/openai_eval_judge_full.json
 ```
 
 Run Ragas evaluation over saved records. This computes faithfulness, answer relevancy, and context precision. It may call judge LLMs through Ragas:
 
 ```bash
-python scripts/run_ragas_eval.py --records logs/openai_eval_sample5.json --output logs/ragas_eval_sample5.json
+python scripts/run_ragas_eval.py --records logs/openai_eval_full.json --output logs/ragas_eval_full.json
 ```
 
 Prepare the Ragas input dataset without spending judge tokens:
 
 ```bash
-python scripts/run_ragas_eval.py --records logs/openai_eval_sample5.json --prepare-only --output logs/ragas_input_sample5.json
+python scripts/run_ragas_eval.py --records logs/openai_eval_full.json --prepare-only --output logs/ragas_input_full.json
 ```
 
 Compare retrieval settings without LLM cost:
