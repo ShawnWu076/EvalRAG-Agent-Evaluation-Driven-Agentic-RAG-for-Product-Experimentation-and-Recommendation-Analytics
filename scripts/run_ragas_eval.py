@@ -164,6 +164,28 @@ def _openai_api_key() -> str:
     return os.getenv("EVALRAG_RAGAS_API_KEY") or os.getenv("OPENAI_API_KEY") or ""
 
 
+def _needs_max_completion_tokens(model: str) -> bool:
+    normalized = model.lower().replace("_", "-")
+    if normalized.startswith("gpt-5"):
+        return True
+    if len(normalized) >= 2 and normalized[0] == "o" and normalized[1].isdigit():
+        return True
+    return normalized == "codex-mini"
+
+
+def _patch_reasoning_model_args(llm: Any, model: str, max_tokens: int) -> None:
+    if not _needs_max_completion_tokens(model):
+        return
+    model_args = getattr(llm, "model_args", None)
+    if not isinstance(model_args, dict):
+        return
+    token_budget = model_args.pop("max_tokens", max_tokens)
+    model_args.setdefault("max_completion_tokens", token_budget)
+    # Ragas 0.4.3 does not recognize dotted GPT-5 names such as gpt-5.4-mini.
+    # Remove optional sampling args that some GPT-5/o-series endpoints reject.
+    model_args.pop("top_p", None)
+
+
 def _build_modern_ragas_metrics(
     model: str,
     embedding_model: str,
@@ -186,6 +208,7 @@ def _build_modern_ragas_metrics(
         raise RuntimeError("Set OPENAI_API_KEY or EVALRAG_RAGAS_API_KEY before running Ragas evaluation.")
     client = OpenAI(api_key=api_key)
     llm = llm_factory(model, client=client, max_tokens=max_tokens, temperature=temperature)
+    _patch_reasoning_model_args(llm, model=model, max_tokens=max_tokens)
     embeddings = OpenAIEmbeddings(client=client, model=embedding_model)
     return [
         Faithfulness(llm=llm),
@@ -304,7 +327,7 @@ def main() -> None:
     parser.add_argument("--limit", type=int, default=None, help="Evaluate only the first N saved records.")
     parser.add_argument("--failure-threshold", type=float, default=0.7, help="Scores below this are surfaced in failure_analysis.")
     parser.add_argument("--max-context-chars", type=int, default=2200, help="Max characters kept per retrieved context.")
-    parser.add_argument("--ragas-model", default=os.getenv("EVALRAG_RAGAS_MODEL", "gpt-4o-mini"), help="OpenAI model used by Ragas judge metrics.")
+    parser.add_argument("--ragas-model", default=os.getenv("EVALRAG_RAGAS_MODEL", "gpt-5.4-mini"), help="OpenAI model used by Ragas judge metrics.")
     parser.add_argument("--ragas-embedding-model", default=os.getenv("EVALRAG_RAGAS_EMBEDDING_MODEL", "text-embedding-3-small"), help="OpenAI embedding model used by Ragas metrics.")
     parser.add_argument("--ragas-max-tokens", type=int, default=int(os.getenv("EVALRAG_RAGAS_MAX_TOKENS", "4096")), help="Max output tokens for Ragas judge calls.")
     parser.add_argument("--ragas-temperature", type=float, default=float(os.getenv("EVALRAG_RAGAS_TEMPERATURE", "0.0")), help="Temperature for Ragas judge calls.")

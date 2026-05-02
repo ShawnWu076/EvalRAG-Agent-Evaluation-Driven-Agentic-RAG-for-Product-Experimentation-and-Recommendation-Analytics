@@ -2,7 +2,13 @@ from __future__ import annotations
 
 import unittest
 
-from scripts.run_ragas_eval import build_ragas_rows, classify_ragas_failures, summarize_metric_rows
+from scripts.run_ragas_eval import (
+    _needs_max_completion_tokens,
+    _patch_reasoning_model_args,
+    build_ragas_rows,
+    classify_ragas_failures,
+    summarize_metric_rows,
+)
 
 
 class RagasEvalTests(unittest.TestCase):
@@ -71,6 +77,18 @@ class RagasEvalTests(unittest.TestCase):
         self.assertEqual(len(failures), 1)
         self.assertEqual(failures[0]["failure_hypothesis"], "retrieval_fail")
         self.assertIn("context_precision", failures[0]["weak_metrics"])
+
+    def test_gpt_5_point_model_uses_max_completion_tokens(self) -> None:
+        class FakeLLM:
+            model_args = {"temperature": 0.0, "top_p": 0.1, "max_tokens": 4096}
+
+        llm = FakeLLM()
+        self.assertTrue(_needs_max_completion_tokens("gpt-5.4-mini"))
+        _patch_reasoning_model_args(llm, model="gpt-5.4-mini", max_tokens=4096)
+
+        self.assertNotIn("max_tokens", llm.model_args)
+        self.assertNotIn("top_p", llm.model_args)
+        self.assertEqual(llm.model_args["max_completion_tokens"], 4096)
 
 
 if __name__ == "__main__":
