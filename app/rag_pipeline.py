@@ -12,6 +12,7 @@ from app.chunking import build_chunks, load_chunks
 from app.concept_coverage import evaluate_concepts
 from app.concept_judge import judge_concepts
 from app.config import PLAYBOOK_DIR, settings
+from app.graph import GraphDependencies, run_workflow
 from app.llm_generator import LLMGenerationConfig, LLMGenerationError, generate_llm_answer
 from app.policy_validator import validate_decision
 from app.retrieval import (
@@ -263,71 +264,48 @@ class EvalRAGPipeline:
         tool_summary: dict[str, Any] | None = None,
         log: bool = True,
         concept_judge_enabled: bool | None = None,
+        csv_text: str | None = None,
     ) -> dict[str, Any]:
-        started = time.perf_counter()
-        query_id = new_query_id()
-        retrieved = self.retrieve(question)
-        generator_backend = settings.generator_backend
-        if generator_backend not in {"openai_compatible", "local_llm", "llm"}:
-            raise ValueError(
-                f"Unsupported generator backend {generator_backend!r}. "
-                "Use an OpenAI-compatible LLM endpoint."
-            )
-
-        model_name = settings.llm_model
-        generator_error = None
-        fallback_error = None
-        try:
-            llm_answer = generate_llm_answer(
-                question,
-                retrieved,
-                _primary_llm_config(),
-                tool_summary=tool_summary,
-                allowed_decisions=sorted(DECISIONS),
-            )
-        except LLMGenerationError as exc:
-            if not settings.llm_fallback_enabled:
-                raise
-            generator_error = str(exc)
-            try:
-                llm_answer = generate_llm_answer(
-                    question,
-                    retrieved,
-                    _fallback_llm_config(),
-                    tool_summary=tool_summary,
-                    allowed_decisions=sorted(DECISIONS),
-                )
-                generator_backend = "local_llm_fallback"
-                model_name = settings.fallback_llm_model
-            except LLMGenerationError as fallback_exc:
-                fallback_error = str(fallback_exc)
-                raise LLMGenerationError(
-                    f"Primary LLM failed: {generator_error}; fallback local LLM failed: {fallback_error}"
-                ) from fallback_exc
-
-        llm_decision = extract_decision(llm_answer)
-        policy_validation = validate_decision(question, llm_decision, tool_summary=tool_summary)
-        final_decision = str(policy_validation.get("final_decision", llm_decision))
-        answer = apply_policy_validation_to_answer(llm_answer, policy_validation)
-        judge_enabled = settings.concept_judge_enabled if concept_judge_enabled is None else concept_judge_enabled
-        concept_judge = _concept_judge_callback() if judge_enabled and expected_concepts else None
-        retrieved_sources = [item["source"] for item in retrieved]
-        evaluation = evaluate_trace(
-            answer,
-            retrieved_sources,
-            final_decision,
-            expected_sources=expected_sources,
-            expected_concepts=expected_concepts,
-            expected_decision=expected_decision,
-            llm_decision=llm_decision,
-            policy_decision=policy_validation.get("policy_decision"),
-            policy_validation=policy_validation,
-            concept_judge=concept_judge,
-            concept_coverage_target=settings.concept_coverage_failure_threshold,
+        deps = GraphDependencies(
+            retrieve_fn=self.retrieve,
+            generate_llm_answer_fn=generate_llm_answer,
+            validate_decision_fn=validate_decision,
+            evaluate_trace_fn=evaluate_trace,
+            extract_decision_fn=extract_decision,
+            apply_policy_validation_to_answer_fn=apply_policy_validation_to_answer,
+            primary_llm_config_fn=_primary_llm_config,
+            fallback_llm_config_fn=_fallback_llm_config,
+            concept_judge_callback_fn=_concept_judge_callback,
         )
-        latency = round(time.perf_counter() - started, 4)
+        final_state = run_workflow(
+            {
+                "question": question,
+                "csv_text": csv_text,
+                "tool_summary": tool_summary,
+                "expected_sources": expected_sources or [],
+                "expected_concepts": expected_concepts or [],
+                "expected_decision": expected_decision,
+                "generator_backend": settings.generator_backend,
+                "model": settings.llm_model,
+                "retry_count": 0,
+                "max_retries": 1,
+                "errors": [],
+                "log": log,
+                "top_k": self.top_k,
+                "alpha": self.alpha,
+            },
+            deps,
+        )
+
+        retrieved = final_state.get("retrieved_chunks", [])
+        llm_decision = final_state.get("llm_decision", UNKNOWN_DECISION)
+        policy_validation = final_state.get("policy_validation", {})
+        final_decision = str(final_state.get("final_decision", llm_decision))
+        answer = str(final_state.get("answer", ""))
+        evaluation = final_state.get("evaluation", {})
+        latency = round(float(final_state.get("latency_seconds", 0.0)), 4)
         record = {
-            "query_id": query_id,
+            "query_id": final_state["query_id"],
             "timestamp": utc_timestamp(),
             "question": question,
             "retrieved_chunks": [
@@ -348,21 +326,26 @@ class EvalRAGPipeline:
             "expected_decision": expected_decision,
             "evaluation": evaluation,
             "latency_seconds": latency,
-            "model": model_name,
-            "generator_backend": generator_backend,
-            "concept_judge_enabled": bool(concept_judge),
-            "concept_judge_model": settings.concept_judge_model if concept_judge else None,
+            "model": final_state.get("model", settings.llm_model),
+            "generator_backend": final_state.get("generator_backend", settings.generator_backend),
+            "concept_judge_enabled": bool(settings.concept_judge_enabled if concept_judge_enabled is None else concept_judge_enabled),
+            "concept_judge_model": settings.concept_judge_model if (settings.concept_judge_enabled if concept_judge_enabled is None else concept_judge_enabled) else None,
+            "decision_json": final_state.get("decision_json"),
+            "task_type": final_state.get("task_type"),
+            "required_tools": final_state.get("required_tools", []),
+            "evidence_bundle": final_state.get("evidence_bundle"),
+            "evidence_sufficiency": final_state.get("evidence_sufficiency"),
         }
-        if policy_validation.get("policy_override"):
-            record["llm_answer_before_policy"] = llm_answer
-        if generator_error:
-            record["generator_error"] = generator_error
-        if fallback_error:
-            record["fallback_error"] = fallback_error
+        if final_state.get("llm_answer_before_policy"):
+            record["llm_answer_before_policy"] = final_state["llm_answer_before_policy"]
+        if final_state.get("generator_error"):
+            record["generator_error"] = final_state["generator_error"]
+        if final_state.get("fallback_error"):
+            record["fallback_error"] = final_state["fallback_error"]
         if llm_decision == UNKNOWN_DECISION:
             record["decision_parse_error"] = "LLM answer did not contain one allowed decision label."
-        if tool_summary:
-            record["tool_summary"] = tool_summary
+        if final_state.get("tool_summary") is not None:
+            record["tool_summary"] = final_state.get("tool_summary")
         if log:
             append_log(record)
         return record

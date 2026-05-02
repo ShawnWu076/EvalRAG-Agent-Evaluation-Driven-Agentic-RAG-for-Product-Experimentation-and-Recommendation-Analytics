@@ -13,7 +13,6 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.rag_pipeline import EvalRAGPipeline  # noqa: E402
-from app.tools.experiment_stats import generate_experiment_summary_from_path  # noqa: E402
 
 
 def main() -> None:
@@ -26,16 +25,15 @@ def main() -> None:
     parser.add_argument("--show-tools", action="store_true")
     args = parser.parse_args()
 
-    tool_summary = generate_experiment_summary_from_path(args.csv_path)
+    csv_text = args.csv_path.read_text(encoding="utf-8")
     pipeline = EvalRAGPipeline()
-    record = pipeline.answer(args.question, tool_summary=tool_summary)
+    record = pipeline.answer(args.question, csv_text=csv_text)
 
     print(record["answer"])
     if args.show_tools:
         print("\n## Tool Summary JSON")
-        print(json.dumps(tool_summary, indent=2))
+        print(json.dumps(record.get("tool_summary", {}), indent=2))
 
 
 if __name__ == "__main__":
     main()
-
