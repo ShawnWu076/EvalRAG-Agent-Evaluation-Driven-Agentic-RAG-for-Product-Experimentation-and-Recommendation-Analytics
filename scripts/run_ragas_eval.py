@@ -193,6 +193,7 @@ def _build_modern_ragas_components(
     max_tokens: int,
     temperature: float,
     relevancy_strictness: int,
+    timeout_seconds: int,
 ) -> tuple[list[Any], Any, Any]:
     from langchain_openai import OpenAIEmbeddings as LangchainOpenAIEmbeddings
     from openai import OpenAI
@@ -213,10 +214,10 @@ def _build_modern_ragas_components(
     api_key = _openai_api_key()
     if not api_key:
         raise RuntimeError("Set OPENAI_API_KEY or EVALRAG_RAGAS_API_KEY before running Ragas evaluation.")
-    client = OpenAI(api_key=api_key)
+    client = OpenAI(api_key=api_key, timeout=timeout_seconds)
     llm = llm_factory(model, client=client, max_tokens=max_tokens, temperature=temperature)
     _patch_reasoning_model_args(llm, model=model, max_tokens=max_tokens)
-    langchain_embeddings = LangchainOpenAIEmbeddings(model=embedding_model, api_key=api_key)
+    langchain_embeddings = LangchainOpenAIEmbeddings(model=embedding_model, api_key=api_key, timeout=timeout_seconds)
     with warnings.catch_warnings():
         warnings.filterwarnings(
             "ignore",
@@ -241,8 +242,14 @@ def _run_modern_ragas(
     max_tokens: int,
     temperature: float,
     relevancy_strictness: int,
+    timeout_seconds: int,
+    max_retries: int,
+    max_wait_seconds: int,
+    max_workers: int,
+    batch_size: int | None,
 ) -> tuple[list[dict[str, Any]], Any]:
     from ragas import EvaluationDataset, evaluate
+    from ragas.run_config import RunConfig
 
     try:
         from ragas import SingleTurnSample
@@ -265,12 +272,21 @@ def _run_modern_ragas(
         max_tokens=max_tokens,
         temperature=temperature,
         relevancy_strictness=relevancy_strictness,
+        timeout_seconds=timeout_seconds,
+    )
+    run_config = RunConfig(
+        timeout=timeout_seconds,
+        max_retries=max_retries,
+        max_wait=max_wait_seconds,
+        max_workers=max_workers,
     )
     result = evaluate(
         dataset,
         metrics=metrics,
         llm=llm,
         embeddings=embeddings,
+        run_config=run_config,
+        batch_size=batch_size,
         raise_exceptions=False,
     )
     dataframe = result.to_pandas()
@@ -309,6 +325,11 @@ def run_ragas(
     max_tokens: int,
     temperature: float,
     relevancy_strictness: int,
+    timeout_seconds: int,
+    max_retries: int,
+    max_wait_seconds: int,
+    max_workers: int,
+    batch_size: int | None,
 ) -> tuple[list[dict[str, Any]], Any]:
     try:
         return _run_modern_ragas(
@@ -318,6 +339,11 @@ def run_ragas(
             max_tokens=max_tokens,
             temperature=temperature,
             relevancy_strictness=relevancy_strictness,
+            timeout_seconds=timeout_seconds,
+            max_retries=max_retries,
+            max_wait_seconds=max_wait_seconds,
+            max_workers=max_workers,
+            batch_size=batch_size,
         )
     except ImportError:
         return _run_legacy_ragas(rows)
@@ -348,12 +374,17 @@ def main() -> None:
     parser.add_argument("--csv-output", type=Path, default=DEFAULT_CSV_OUTPUT_PATH, help="Optional CSV output path.")
     parser.add_argument("--limit", type=int, default=None, help="Evaluate only the first N saved records.")
     parser.add_argument("--failure-threshold", type=float, default=0.7, help="Scores below this are surfaced in failure_analysis.")
-    parser.add_argument("--max-context-chars", type=int, default=2200, help="Max characters kept per retrieved context.")
-    parser.add_argument("--ragas-model", default=os.getenv("EVALRAG_RAGAS_MODEL", "gpt-5.4-mini"), help="OpenAI model used by Ragas judge metrics.")
+    parser.add_argument("--max-context-chars", type=int, default=1600, help="Max characters kept per retrieved context.")
+    parser.add_argument("--ragas-model", default=os.getenv("EVALRAG_RAGAS_MODEL", "gpt-4.1-mini"), help="OpenAI model used by Ragas judge metrics.")
     parser.add_argument("--ragas-embedding-model", default=os.getenv("EVALRAG_RAGAS_EMBEDDING_MODEL", "text-embedding-3-small"), help="OpenAI embedding model used by Ragas metrics.")
     parser.add_argument("--ragas-max-tokens", type=int, default=int(os.getenv("EVALRAG_RAGAS_MAX_TOKENS", "4096")), help="Max output tokens for Ragas judge calls.")
     parser.add_argument("--ragas-temperature", type=float, default=float(os.getenv("EVALRAG_RAGAS_TEMPERATURE", "0.0")), help="Temperature for Ragas judge calls.")
     parser.add_argument("--ragas-relevancy-strictness", type=int, default=int(os.getenv("EVALRAG_RAGAS_RELEVANCY_STRICTNESS", "1")), help="Number of generated questions used by answer_relevancy. GPT-5 judge paths are most stable with 1.")
+    parser.add_argument("--ragas-timeout-seconds", type=int, default=int(os.getenv("EVALRAG_RAGAS_TIMEOUT_SECONDS", "300")), help="Per-job timeout for Ragas judge calls.")
+    parser.add_argument("--ragas-max-retries", type=int, default=int(os.getenv("EVALRAG_RAGAS_MAX_RETRIES", "2")), help="Retry count for Ragas judge calls.")
+    parser.add_argument("--ragas-max-wait-seconds", type=int, default=int(os.getenv("EVALRAG_RAGAS_MAX_WAIT_SECONDS", "20")), help="Maximum retry backoff wait for Ragas judge calls.")
+    parser.add_argument("--ragas-max-workers", type=int, default=int(os.getenv("EVALRAG_RAGAS_MAX_WORKERS", "2")), help="Maximum concurrent Ragas judge jobs. Lower values reduce timeout/rate-limit pressure.")
+    parser.add_argument("--ragas-batch-size", type=int, default=int(os.getenv("EVALRAG_RAGAS_BATCH_SIZE", "4")), help="Ragas evaluation batch size. Use 0 to let Ragas choose.")
     parser.add_argument("--prepare-only", action="store_true", help="Prepare the Ragas dataset JSON without calling Ragas or an LLM judge.")
     args = parser.parse_args()
 
@@ -370,6 +401,23 @@ def main() -> None:
         print(json.dumps({"record_count": len(rows), "prepared_dataset": str(args.output)}, indent=2))
         return
 
+    print(
+        json.dumps(
+            {
+                "record_count": len(rows),
+                "metric_count": len(CANONICAL_METRICS),
+                "estimated_jobs": len(rows) * len(CANONICAL_METRICS),
+                "ragas_model": args.ragas_model,
+                "ragas_embedding_model": args.ragas_embedding_model,
+                "timeout_seconds": args.ragas_timeout_seconds,
+                "max_retries": args.ragas_max_retries,
+                "max_workers": args.ragas_max_workers,
+                "batch_size": args.ragas_batch_size or None,
+            },
+            indent=2,
+        )
+    )
+
     try:
         metric_rows, dataframe = run_ragas(
             rows,
@@ -378,6 +426,11 @@ def main() -> None:
             max_tokens=args.ragas_max_tokens,
             temperature=args.ragas_temperature,
             relevancy_strictness=args.ragas_relevancy_strictness,
+            timeout_seconds=args.ragas_timeout_seconds,
+            max_retries=args.ragas_max_retries,
+            max_wait_seconds=args.ragas_max_wait_seconds,
+            max_workers=args.ragas_max_workers,
+            batch_size=args.ragas_batch_size or None,
         )
     except ImportError as exc:
         raise SystemExit(

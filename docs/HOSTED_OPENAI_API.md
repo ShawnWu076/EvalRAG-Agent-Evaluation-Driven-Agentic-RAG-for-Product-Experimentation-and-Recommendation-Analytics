@@ -74,7 +74,7 @@ python scripts/run_eval.py --concept-judge --save-records logs/openai_eval_judge
 
 You can use a separate judge model with `EVALRAG_CONCEPT_JUDGE_MODEL`; otherwise it uses the main LLM model.
 
-For Ragas judge calls, `scripts/run_ragas_eval.py` defaults to `gpt-5.4-mini`, `text-embedding-3-small`, and `EVALRAG_RAGAS_MAX_TOKENS=4096` to avoid truncated structured judge outputs.
+For Ragas judge calls, `scripts/run_ragas_eval.py` defaults to `gpt-4.1-mini`, `text-embedding-3-small`, `EVALRAG_RAGAS_MAX_TOKENS=4096`, and conservative timeout/concurrency settings to avoid truncated structured judge outputs.
 
 ## Notes
 
