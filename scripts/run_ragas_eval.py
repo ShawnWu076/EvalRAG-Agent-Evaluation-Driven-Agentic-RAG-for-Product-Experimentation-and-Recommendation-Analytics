@@ -14,6 +14,7 @@ import math
 import os
 import statistics
 import sys
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -186,22 +187,22 @@ def _patch_reasoning_model_args(llm: Any, model: str, max_tokens: int) -> None:
     model_args.pop("top_p", None)
 
 
-def _build_modern_ragas_metrics(
+def _build_modern_ragas_components(
     model: str,
     embedding_model: str,
     max_tokens: int,
     temperature: float,
-) -> list[Any]:
+) -> tuple[list[Any], Any, Any]:
     from openai import OpenAI
     from ragas.embeddings import OpenAIEmbeddings
     from ragas.llms import llm_factory
-    from ragas.metrics.collections import (
-        AnswerCorrectness,
-        AnswerRelevancy,
-        ContextPrecisionWithReference,
-        ContextRecall,
-        Faithfulness,
-    )
+
+    # Ragas 0.4.x documents the newer ragas.metrics.collections imports, but
+    # evaluate() in the same release still validates against the older metric
+    # base class. The module-level metric objects below are the compatible path.
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=DeprecationWarning, module="ragas")
+        from ragas.metrics import answer_correctness, answer_relevancy, context_precision, context_recall, faithfulness
 
     api_key = _openai_api_key()
     if not api_key:
@@ -210,13 +211,8 @@ def _build_modern_ragas_metrics(
     llm = llm_factory(model, client=client, max_tokens=max_tokens, temperature=temperature)
     _patch_reasoning_model_args(llm, model=model, max_tokens=max_tokens)
     embeddings = OpenAIEmbeddings(client=client, model=embedding_model)
-    return [
-        Faithfulness(llm=llm),
-        AnswerRelevancy(llm=llm, embeddings=embeddings),
-        ContextPrecisionWithReference(llm=llm),
-        ContextRecall(llm=llm),
-        AnswerCorrectness(llm=llm, embeddings=embeddings),
-    ]
+    metrics = [faithfulness, answer_relevancy, context_precision, context_recall, answer_correctness]
+    return metrics, llm, embeddings
 
 
 def _run_modern_ragas(
@@ -243,14 +239,17 @@ def _run_modern_ragas(
         for row in rows
     ]
     dataset = EvaluationDataset(samples=samples)
+    metrics, llm, embeddings = _build_modern_ragas_components(
+        model=model,
+        embedding_model=embedding_model,
+        max_tokens=max_tokens,
+        temperature=temperature,
+    )
     result = evaluate(
         dataset,
-        metrics=_build_modern_ragas_metrics(
-            model=model,
-            embedding_model=embedding_model,
-            max_tokens=max_tokens,
-            temperature=temperature,
-        ),
+        metrics=metrics,
+        llm=llm,
+        embeddings=embeddings,
         raise_exceptions=False,
     )
     dataframe = result.to_pandas()
