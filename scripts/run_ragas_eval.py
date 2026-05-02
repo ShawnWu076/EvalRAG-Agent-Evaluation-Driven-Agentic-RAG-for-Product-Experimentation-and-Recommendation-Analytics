@@ -192,16 +192,22 @@ def _build_modern_ragas_components(
     embedding_model: str,
     max_tokens: int,
     temperature: float,
+    relevancy_strictness: int,
 ) -> tuple[list[Any], Any, Any]:
+    from langchain_openai import OpenAIEmbeddings as LangchainOpenAIEmbeddings
     from openai import OpenAI
-    from ragas.embeddings import OpenAIEmbeddings
+    from ragas.embeddings.base import LangchainEmbeddingsWrapper
     from ragas.llms import llm_factory
 
     # Ragas 0.4.x documents the newer ragas.metrics.collections imports, but
     # evaluate() in the same release still validates against the older metric
-    # base class. The module-level metric objects below are the compatible path.
+    # base class. These class constructors produce compatible metric objects.
     with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=DeprecationWarning, module="ragas")
+        warnings.filterwarnings(
+            "ignore",
+            message="Importing .* from 'ragas.metrics' is deprecated.*",
+            category=DeprecationWarning,
+        )
         from ragas.metrics import answer_correctness, answer_relevancy, context_precision, context_recall, faithfulness
 
     api_key = _openai_api_key()
@@ -210,8 +216,21 @@ def _build_modern_ragas_components(
     client = OpenAI(api_key=api_key)
     llm = llm_factory(model, client=client, max_tokens=max_tokens, temperature=temperature)
     _patch_reasoning_model_args(llm, model=model, max_tokens=max_tokens)
-    embeddings = OpenAIEmbeddings(client=client, model=embedding_model)
-    metrics = [faithfulness, answer_relevancy, context_precision, context_recall, answer_correctness]
+    langchain_embeddings = LangchainOpenAIEmbeddings(model=embedding_model, api_key=api_key)
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="LangchainEmbeddingsWrapper is deprecated.*",
+            category=DeprecationWarning,
+        )
+        embeddings = LangchainEmbeddingsWrapper(langchain_embeddings)
+    metrics = [
+        type(faithfulness)(),
+        type(answer_relevancy)(strictness=relevancy_strictness),
+        type(context_precision)(),
+        type(context_recall)(),
+        type(answer_correctness)(),
+    ]
     return metrics, llm, embeddings
 
 
@@ -221,6 +240,7 @@ def _run_modern_ragas(
     embedding_model: str,
     max_tokens: int,
     temperature: float,
+    relevancy_strictness: int,
 ) -> tuple[list[dict[str, Any]], Any]:
     from ragas import EvaluationDataset, evaluate
 
@@ -244,6 +264,7 @@ def _run_modern_ragas(
         embedding_model=embedding_model,
         max_tokens=max_tokens,
         temperature=temperature,
+        relevancy_strictness=relevancy_strictness,
     )
     result = evaluate(
         dataset,
@@ -287,6 +308,7 @@ def run_ragas(
     embedding_model: str,
     max_tokens: int,
     temperature: float,
+    relevancy_strictness: int,
 ) -> tuple[list[dict[str, Any]], Any]:
     try:
         return _run_modern_ragas(
@@ -295,6 +317,7 @@ def run_ragas(
             embedding_model=embedding_model,
             max_tokens=max_tokens,
             temperature=temperature,
+            relevancy_strictness=relevancy_strictness,
         )
     except ImportError:
         return _run_legacy_ragas(rows)
@@ -330,6 +353,7 @@ def main() -> None:
     parser.add_argument("--ragas-embedding-model", default=os.getenv("EVALRAG_RAGAS_EMBEDDING_MODEL", "text-embedding-3-small"), help="OpenAI embedding model used by Ragas metrics.")
     parser.add_argument("--ragas-max-tokens", type=int, default=int(os.getenv("EVALRAG_RAGAS_MAX_TOKENS", "4096")), help="Max output tokens for Ragas judge calls.")
     parser.add_argument("--ragas-temperature", type=float, default=float(os.getenv("EVALRAG_RAGAS_TEMPERATURE", "0.0")), help="Temperature for Ragas judge calls.")
+    parser.add_argument("--ragas-relevancy-strictness", type=int, default=int(os.getenv("EVALRAG_RAGAS_RELEVANCY_STRICTNESS", "1")), help="Number of generated questions used by answer_relevancy. GPT-5 judge paths are most stable with 1.")
     parser.add_argument("--prepare-only", action="store_true", help="Prepare the Ragas dataset JSON without calling Ragas or an LLM judge.")
     args = parser.parse_args()
 
@@ -353,6 +377,7 @@ def main() -> None:
             embedding_model=args.ragas_embedding_model,
             max_tokens=args.ragas_max_tokens,
             temperature=args.ragas_temperature,
+            relevancy_strictness=args.ragas_relevancy_strictness,
         )
     except ImportError as exc:
         raise SystemExit(
