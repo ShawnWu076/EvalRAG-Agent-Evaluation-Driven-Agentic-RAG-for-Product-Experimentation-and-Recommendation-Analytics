@@ -73,6 +73,9 @@ def _retrieval_only_record(pipeline: EvalRAGPipeline, item: dict[str, Any]) -> d
         "expected_sources": item.get("expected_sources", []),
         "expected_concepts": item.get("expected_concepts", []),
         "expected_decision": item.get("expected_decision"),
+        "category": item.get("category"),
+        "ground_truth": item.get("ground_truth") or item.get("reference"),
+        "reference_contexts": item.get("reference_contexts", []),
         "evaluation": evaluation,
         "latency_seconds": latency,
         "model": None,
@@ -140,6 +143,9 @@ def run_eval(
                 concept_judge_enabled=concept_judge_enabled,
             )
             record["eval_id"] = item["id"]
+            record["category"] = item.get("category")
+            record["ground_truth"] = item.get("ground_truth") or item.get("reference")
+            record["reference_contexts"] = item.get("reference_contexts", [])
         else:
             record = _retrieval_only_record(pipeline, item)
         records.append(record)

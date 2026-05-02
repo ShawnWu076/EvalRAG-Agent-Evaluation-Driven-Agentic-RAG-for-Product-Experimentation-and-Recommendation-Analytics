@@ -54,6 +54,7 @@ This is still a prototype, not a production launch-decision system. The goal is 
 - Hosted OpenAI-compatible generation by default, with local Ollama `qwen3:8b` fallback.
 - Telemetry for query, retrieved chunks, scores, latency, answer, model, and backend.
 - Evaluation harness for retrieval quality, concept coverage, decision accuracy, latency, and graph-level workflow checks.
+- Ragas evaluation for faithfulness, answer relevancy, and context precision over saved eval records.
 - Retrieval-only eval mode for debugging search quality without LLM cost.
 - CSV analysis tools for SRM checks, metric lifts, approximate tests, and segment analysis.
 
@@ -127,12 +128,14 @@ scripts/
   query.py                   Ask one question from CLI
   analyze_csv.py             Analyze one synthetic experiment CSV
   run_eval.py                Run scenario evaluation
+  run_ragas_eval.py          Run Ragas metrics over saved eval records
   compare_retrievers.py      Compare retrieval settings without LLM calls
   generate_synthetic_data.py Generate synthetic CSV scenarios
 docs/
   HOSTED_OPENAI_API.md       Hosted OpenAI setup
   LOCAL_LLM.md               Ollama / LM Studio setup
   DECISION_EVALUATION.md     LLM/policy/final decision tracing
+  EVALUATION_DRIVEN_RAG.md   Eval loop, Ragas, failure analysis, LangSmith notes
 logs/                        Runtime logs and saved eval records, ignored by git
 tests/                       Unit tests
 ```
@@ -210,7 +213,7 @@ model: qwen3:8b
 generator_error: <primary hosted model error>
 ```
 
-See `docs/HOSTED_OPENAI_API.md`, `docs/LOCAL_LLM.md`, and `docs/DECISION_EVALUATION.md` for more details.
+See `docs/HOSTED_OPENAI_API.md`, `docs/LOCAL_LLM.md`, `docs/DECISION_EVALUATION.md`, and `docs/EVALUATION_DRIVEN_RAG.md` for more details.
 
 ## Evaluation
 
@@ -250,6 +253,18 @@ Run stricter concept coverage with an LLM judge fallback. The judge is only call
 python scripts/run_eval.py --concept-judge --limit 5 --save-records logs/openai_eval_judge_sample5.json
 ```
 
+Run Ragas evaluation over saved records. This computes faithfulness, answer relevancy, and context precision. It may call judge LLMs through Ragas:
+
+```bash
+python scripts/run_ragas_eval.py --records logs/openai_eval_sample5.json --output logs/ragas_eval_sample5.json
+```
+
+Prepare the Ragas input dataset without spending judge tokens:
+
+```bash
+python scripts/run_ragas_eval.py --records logs/openai_eval_sample5.json --prepare-only --output logs/ragas_input_sample5.json
+```
+
 Compare retrieval settings without LLM cost:
 
 ```bash
@@ -275,6 +290,12 @@ Answer metrics include:
 - `policy_correction_rate`
 - `policy_regression_rate`
 - `avg_latency_seconds`
+
+Ragas metrics include:
+
+- `faithfulness`: whether the answer is grounded in retrieved contexts
+- `answer_relevancy`: whether the answer directly addresses the user question
+- `context_precision`: whether retrieved contexts are useful and ranked well
 
 ## Example Output Shape
 
@@ -325,7 +346,8 @@ The internal workflow also records structured intermediate objects such as:
 3. Run retrieval-only eval to diagnose source coverage before spending LLM tokens.
 4. Run LLM eval and inspect saved records for decision and grounding failures.
 5. Expand targeted eval cases for each policy validator rule and inspect `policy_correction_rate` / `policy_regression_rate`.
-6. Add stronger faithfulness evaluation beyond concept coverage, such as groundedness judging against retrieved chunks or a Ragas/DeepEval-style rubric.
+6. Expand the golden dataset with ground-truth answers and categories.
+7. Add a pre/post comparison script for custom eval and Ragas reports.
 
 ## Project Identity
 

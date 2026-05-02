@@ -1,0 +1,61 @@
+from __future__ import annotations
+
+import unittest
+
+from scripts.run_ragas_eval import build_ragas_rows, classify_ragas_failures, summarize_metric_rows
+
+
+class RagasEvalTests(unittest.TestCase):
+    def test_build_ragas_rows_uses_saved_answer_contexts_and_reference_fallback(self) -> None:
+        rows = build_ragas_rows(
+            [
+                {
+                    "eval_id": "q001",
+                    "question": "Should we launch?",
+                    "answer": "Do not launch yet.",
+                    "retrieved_chunks": [{"text": "Retention is a guardrail metric."}],
+                    "expected_decision": "investigate_further",
+                    "expected_concepts": ["retention", "guardrail metric"],
+                }
+            ]
+        )
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["eval_id"], "q001")
+        self.assertEqual(rows[0]["retrieved_contexts"], ["Retention is a guardrail metric."])
+        self.assertIn("investigate_further", rows[0]["reference"])
+        self.assertIn("retention", rows[0]["reference"])
+
+    def test_summarize_metric_rows_handles_modern_and_legacy_metric_names(self) -> None:
+        summary = summarize_metric_rows(
+            [
+                {"faithfulness": 0.8, "answer_relevancy": 0.6, "context_precision": 0.7},
+                {"faithfulness": 1.0, "response_relevancy": 0.8, "llm_context_precision_with_reference": 0.9},
+            ]
+        )
+
+        self.assertEqual(summary["faithfulness"], 0.9)
+        self.assertEqual(summary["answer_relevancy"], 0.7)
+        self.assertEqual(summary["context_precision"], 0.8)
+
+    def test_classify_ragas_failures_prefers_retrieval_failure_when_context_is_weak(self) -> None:
+        failures = classify_ragas_failures(
+            [
+                {
+                    "eval_id": "q001",
+                    "user_input": "Question",
+                    "faithfulness": 0.95,
+                    "answer_relevancy": 0.9,
+                    "context_precision": 0.2,
+                }
+            ],
+            threshold=0.7,
+        )
+
+        self.assertEqual(len(failures), 1)
+        self.assertEqual(failures[0]["failure_hypothesis"], "retrieval_fail")
+        self.assertIn("context_precision", failures[0]["weak_metrics"])
+
+
+if __name__ == "__main__":
+    unittest.main()
